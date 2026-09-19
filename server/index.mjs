@@ -32,8 +32,8 @@ const config = {
   ].filter(Boolean),
   embeddingModel: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001',
   liveModel: process.env.GEMINI_LIVE_MODEL || 'gemini-2.0-flash-exp',
-  googleClientId: process.env.GOOGLE_CLIENT_ID || '',
-  sessionSecret: process.env.SESSION_SECRET || 'nabta-local-development-only',
+  googleClientId: (process.env.GOOGLE_CLIENT_ID || '').trim(),
+  sessionSecret: (process.env.SESSION_SECRET || 'nabta-local-development-only').trim(),
 };
 
 const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
