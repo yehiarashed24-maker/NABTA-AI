@@ -2495,7 +2495,7 @@ const AccountPage = () => {
   };
   const logout = async () => {
     await api("/api/auth/logout", { method: "POST" });
-    window.location.href = "/app";
+    window.location.href = "/";
   };
   if (!account)
     return (

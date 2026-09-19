@@ -4,6 +4,10 @@
     {
       "source": "/api/(.*)",
       "destination": "/api/index.mjs"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
