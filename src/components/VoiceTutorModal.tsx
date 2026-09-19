@@ -9,6 +9,7 @@ interface VoiceTutorModalProps {
   isOpen: boolean;
   onClose: () => void;
   onRefresh: () => Promise<void>;
+  grounded?: boolean;
 }
 
 export const VoiceTutorModal: React.FC<VoiceTutorModalProps> = ({
@@ -16,6 +17,7 @@ export const VoiceTutorModal: React.FC<VoiceTutorModalProps> = ({
   isOpen,
   onClose,
   onRefresh,
+  grounded = true,
 }) => {
   const { t, lang } = useI18n();
   const [isListening, setIsListening] = useState(false);
@@ -178,8 +180,8 @@ export const VoiceTutorModal: React.FC<VoiceTutorModalProps> = ({
         signal: controller.signal,
         body: JSON.stringify({
           question: queryText,
-          grounded: true,
-          mode: "voice",
+          grounded: grounded !== false,
+          mode: grounded === false ? "explain" : "voice",
           isVoice: true,
           language: lang,
         }),

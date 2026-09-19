@@ -500,7 +500,11 @@ export async function retrieve(storeOrChunks, workspaceIdOrQuery, queryOrTopK, t
     .sort((a, b) => b.score - a.score);
 
   if (semanticMatches.length === 0 && chunks.length > 0) {
-    return chunks.slice(0, topK).map((c) => ({ ...c, score: 0.5 }));
+    const isGeneralSummaryQuery = /(?:لخص|ملخص|overview|summary|محتوى|مواضيع|topics|outline|what is this|عن ماذا)/i.test(query);
+    if (isGeneralSummaryQuery) {
+      return chunks.slice(0, topK).map((c) => ({ ...c, score: 0.25 }));
+    }
+    return [];
   }
 
   return semanticMatches.slice(0, topK);
@@ -1141,7 +1145,7 @@ app.delete('/api/workspaces/:id', requireUser, async (req, res, next) => {
 app.post('/api/workspaces/:id/chat', requireUser, aiLimiter, async (req, res, next) => {
   try {
     const question = sanitizeText(req.body.question).slice(0, 2000);
-    const grounded = req.body.grounded !== false;
+    const grounded = req.body.grounded !== false && req.body.mode !== 'explain' && req.body.mode !== 'open';
     const isVoice = req.body.isVoice === true || req.body.mode === 'voice';
     if (!question) return res.status(400).json({ error: 'Please ask a question.' });
     const store = await readStore(); const view = workspaceView(store, req.params.id, req.user.id);
@@ -1175,7 +1179,7 @@ app.post('/api/workspaces/:id/chat', requireUser, aiLimiter, async (req, res, ne
 
     const relevant = await retrieve(store, req.params.id, question);
     let answer;
-    if (ai && relevant.length) {
+    if (ai && (relevant.length > 0 || !grounded)) {
       const targetPage = detectPageNumber(question);
       const pageInstruction = targetPage !== null
         ? `The user specifically asked for Page/Slide ${targetPage}. Provide a thorough, complete, and meticulous explanation of all concepts, questions, and details from Page ${targetPage} found in the sources.`
@@ -1189,14 +1193,14 @@ CRITICAL SPOKEN VOICE GUIDELINES:
 - DO NOT use any Markdown formatting.
 - Speak in natural, fluent ${userLang === 'en' ? 'English' : userLang === 'fr' ? 'French' : userLang === 'es' ? 'Spanish' : userLang === 'de' ? 'German' : 'Arabic'}.
 - Do NOT include English words in parentheses alongside Arabic terms.
-${grounded ? `- STRICT GROUNDING IS ON: Answer ONLY from the source context below. If the topic is not mentioned in the notes, do NOT explain it; simply state in one polite spoken sentence that this topic is not in their uploaded notes and they can disable Grounded Mode for external questions.` : `- GROUNDED MODE IS OFF: You may freely answer using your broader knowledge and helpful spoken analogies.`}
+${grounded ? `- STRICT GROUNDING IS ON: Answer ONLY from the source context below. If the topic is not mentioned in the notes, do NOT explain it; simply state in one polite spoken sentence that this topic is not in their uploaded notes and they can disable Grounded Mode for external questions.` : `- GROUNDED MODE IS OFF (OPEN MODE): Freely and helpfully answer the student's question using your broader knowledge and clear spoken analogies. DO NOT decline to answer.`}
 ${pageInstruction}
 
 Student Spoken Question:
 ${question}
 
 Source Context from Student's Notebook:
-${contextText(relevant.slice(0, 3))}`
+${relevant.length ? contextText(relevant.slice(0, 3)) : 'No specific excerpts found in notebook.'}`
         : grounded
           ? `You are Nabta AI (نبتة), an expert academic tutor.
 Your goal is to provide a clean, beautifully organized, and crystal-clear explanation for a student.
@@ -1234,7 +1238,7 @@ User Question:
 ${question}
 
 Source Context from User's Notebook:
-${contextText(relevant)}`
+${relevant.length ? contextText(relevant) : 'No matching text found in uploaded notebook.'}`
           : `You are Nabta AI (نبتة), an expert academic tutor.
 Your goal is to provide a clean, beautifully organized, and crystal-clear explanation.
 
@@ -1245,16 +1249,20 @@ CRITICAL FORMATTING RULES:
 
 CONTENT & PEDAGOGY:
 - Language: ALWAYS respond in fluent, natural Arabic if the question is in Arabic.
-- Grounded Mode is OFF: Use the sources as your foundation, expanding with clear analogies and examples.
+- GROUNDED MODE IS OFF (OPEN MODE):
+  * You have full freedom to answer any academic, scientific, or general question using your comprehensive knowledge base.
+  * If the student's notebook excerpts below contain relevant material, build upon them.
+  * If the question asks about an external topic not present in the notebook (e.g. general math concepts, Base 10 / number systems, external programming or science concepts), ANSWER IT DIRECTLY, THOROUGHLY, AND BEAUTIFULLY!
+  * NEVER refuse to answer or say that the topic is not covered in the notes when Grounded Mode is OFF.
 - If explaining questions: state the question, list options, state the correct answer, and explain clearly.
-- Preserve technical English terms in parentheses.
+- Preserve technical English terms in parentheses (e.g. النظام العشري (Base 10 / Decimal System)).
 ${pageInstruction}
 
 User Question:
 ${question}
 
-Source Context from User's Notebook:
-${contextText(relevant)}`;
+Source Context from User's Notebook (if relevant):
+${relevant.length ? contextText(relevant) : 'No specific notebook excerpts found; answer fully using general academic knowledge.'}`;
 
       answer = await geminiText(prompt, isVoice ? { maxOutputTokens: 200, temperature: 0.3 } : {});
     }
@@ -1267,14 +1275,21 @@ ${contextText(relevant)}`;
         answer = isArabic
           ? `بناءً على محتوى مذكراتك المرفوعة:\n\n${topTexts}`
           : `Here is what your uploaded study material covers:\n\n${topTexts}`;
+      } else if (grounded) {
+        answer = isArabic
+          ? 'عذراً، هذا الموضوع غير مذكور في مذكراتك المرفوعة. يمكنك سؤالي عن محتويات مذكرتك، أو تعطيل «الوضع الموثق» إذا أردت شرحاً عاماً من خارج المذكرة.'
+          : 'Sorry, this topic is not covered in your uploaded notebook. You can ask about your study material, or turn off Grounded Mode for a general explanation.';
       } else {
         answer = isArabic
-          ? 'لم أتمكن من العثور على معلومات مطابقة في مذكراتك المرفوعة حالياً. يمكنك تجربة صياغة السؤال بشكل مختلف أو تعطيل الوضع الموثق.'
-          : 'I could not find matching information in your uploaded material. Try asking differently or turn off Grounded Mode.';
+          ? 'عذراً، حدث تعذر مؤقت في الاتصال بنموذج الذكاء الاصطناعي للإجابة على هذا السؤال العام. يرجى المحاولة مرة أخرى.'
+          : 'Sorry, the AI service encountered a temporary issue answering this question. Please try again.';
       }
     }
 
-    const citations = relevant.slice(0, 3).map((chunk) => ({ document: chunk.documentName, page: chunk.page, excerpt: chunk.text.slice(0, 220) }));
+    const isDecline = answer.includes('غير مذكور في مذكراتك') || answer.includes('not covered in your uploaded notebook');
+    const citations = (!isDecline && relevant.length > 0 && (relevant[0].score === undefined || relevant[0].score >= 0.15))
+      ? relevant.slice(0, 3).map((chunk) => ({ document: chunk.documentName, page: chunk.page, excerpt: chunk.text.slice(0, 220) }))
+      : [];
     const now = new Date().toISOString();
     store.messages.push({ id: randomUUID(), workspaceId: req.params.id, role: 'user', content: question, createdAt: now }, { id: randomUUID(), workspaceId: req.params.id, role: 'assistant', content: answer, citations, createdAt: now });
     const workspace = store.workspaces.find((item) => item.id === req.params.id); workspace.lastStudiedAt = now;
@@ -1427,8 +1442,8 @@ app.post('/api/workspaces/:id/quizzes', requireUser, aiLimiter, async (req, res,
     const questionType = ['mcq', 'essay', 'mixed'].includes(body.questionType) ? body.questionType : 'mcq';
     const count = Math.min(Math.max(Number(body.count) || 5, 1), 20);
     const topic = sanitizeText(body.topic).slice(0, 120);
-    const language = body.language === 'en' ? 'English' : 'Arabic';
-    const chunks = topic ? await retrieve(store, req.params.id, topic, 12) : store.chunks.filter((item) => item.workspaceId === req.params.id).slice(0, 12);
+    const retrievedChunks = topic ? await retrieve(store, req.params.id, topic, 12) : [];
+    const chunks = retrievedChunks.length ? retrievedChunks : store.chunks.filter((item) => item.workspaceId === req.params.id).slice(0, 12);
 
     let questions = null;
     if (ai) {
@@ -1733,8 +1748,8 @@ app.post('/api/workspaces/:id/quizzes/weak-topics', requireUser, async (req, res
     const weakConcepts = view.concepts.filter((c) => c.status === 'weak' || c.masteryScore < 50);
     const targetTopic = weakConcepts.length ? weakConcepts.slice(0, 3).map((c) => c.name).join(', ') : 'Security Foundations';
 
-    const count = 5;
-    const chunks = await retrieve(store, req.params.id, targetTopic, 10);
+    const retrievedChunks = await retrieve(store, req.params.id, targetTopic, 10);
+    const chunks = retrievedChunks.length ? retrievedChunks : store.chunks.filter((item) => item.workspaceId === req.params.id).slice(0, 10);
     let questions = null;
     if (ai) {
       const prompt = `Generate a 5-question adaptive remedial quiz targeting these weak concepts: ${targetTopic}.
@@ -1781,7 +1796,8 @@ app.post('/api/workspaces/:id/viva/start', requireUser, aiLimiter, async (req, r
     const concepts = view.concepts.length ? view.concepts : await extractConceptsFromNotebook(store, req.params.id);
     const sorted = [...concepts].sort((a, b) => a.masteryScore - b.masteryScore);
     const targetConcept = sorted[0]?.name || 'Security Principles';
-    const chunks = await retrieve(store, req.params.id, targetConcept, 8);
+    const retrievedStartChunks = await retrieve(store, req.params.id, targetConcept, 8);
+    const chunks = retrievedStartChunks.length ? retrievedStartChunks : store.chunks.filter((item) => item.workspaceId === req.params.id).slice(0, 8);
 
     let firstQuestion = `Explain in your own words the core idea behind ${targetConcept}. What problem does it solve in a computer system?`;
     if (ai) {
@@ -1811,7 +1827,8 @@ app.post('/api/workspaces/:id/viva/turn', requireUser, aiLimiter, async (req, re
   try {
     const { vivaId, concept, questionNumber, questionText, studentAnswer } = req.body || {};
     const store = await readStore();
-    const chunks = await retrieve(store, req.params.id, concept || 'Security', 8);
+    const retrievedTurnChunks = await retrieve(store, req.params.id, concept || 'Security', 8);
+    const chunks = retrievedTurnChunks.length ? retrievedTurnChunks : store.chunks.filter((item) => item.workspaceId === req.params.id).slice(0, 8);
 
     let evaluation = null;
     const isFinal = Number(questionNumber) >= 3;
@@ -1893,8 +1910,8 @@ ${contextText(chunks)}`;
 app.post('/api/workspaces/:id/explain', requireUser, aiLimiter, async (req, res, next) => {
   try {
     const { topic, mode = 'detailed', language = 'ar' } = req.body || {};
-    const store = await readStore();
-    const chunks = await retrieve(store, req.params.id, topic || 'core concepts', 8);
+    const retrievedExplainChunks = await retrieve(store, req.params.id, topic || 'core concepts', 8);
+    const chunks = retrievedExplainChunks.length ? retrievedExplainChunks : store.chunks.filter((item) => item.workspaceId === req.params.id).slice(0, 8);
     const isArabic = language === 'ar';
 
     let explanation = null;

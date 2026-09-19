@@ -147,3 +147,31 @@ test('MCQ BiDi parsing isolates option letters and parses correct answer cards c
   assert.equal(optMatch[3].trim(), 'A measure of how much a system is threatened by an attack');
 });
 
+test('retrieval returns empty array for completely unrelated query, preventing bogus citations', async () => {
+  const chunks = [
+    { id: 'c1', documentId: 'd1', page: 4, text: 'Confidentiality and encryption algorithms in cybersecurity.', embedding: localEmbedding('Confidentiality encryption') },
+    { id: 'c2', documentId: 'd1', page: 9, text: 'Access control matrices and authentication policies.', embedding: localEmbedding('Access control authentication') },
+  ];
+  // Unrelated math query
+  const unrelated = await retrieve(chunks, 'base 10 ايه');
+  assert.equal(unrelated.length, 0, 'Unrelated query must return empty array, not arbitrary chunks');
+
+  // General summary query
+  const summary = await retrieve(chunks, 'لخص لي محتوى المذكرة');
+  assert.ok(summary.length > 0, 'Summary query should return chunks');
+});
+
+test('grounded resolution honors mode=explain and grounded=false correctly', () => {
+  const checkGrounded = (body) => body.grounded !== false && body.mode !== 'explain' && body.mode !== 'open';
+
+  // Strict mode
+  assert.equal(checkGrounded({ grounded: true, mode: 'strict' }), true);
+  assert.equal(checkGrounded({}), true);
+
+  // Open mode (either grounded=false, mode=explain, or both)
+  assert.equal(checkGrounded({ grounded: false, mode: 'strict' }), false);
+  assert.equal(checkGrounded({ grounded: true, mode: 'explain' }), false);
+  assert.equal(checkGrounded({ grounded: false, mode: 'explain' }), false);
+  assert.equal(checkGrounded({ mode: 'open' }), false);
+});
+

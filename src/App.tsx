@@ -1357,8 +1357,8 @@ const Tutor = ({
   const { t, lang } = useI18n();
   const [question, setQuestion] = useState(initialQuery);
   const [busy, setBusy] = useState(false);
-  const [grounded, setGrounded] = useState(true);
   const [mode, setMode] = useState<"strict" | "explain">("strict");
+  const isGrounded = mode === "strict";
   const [isListening, setIsListening] = useState(false);
   const [voiceModalOpen, setVoiceModalOpen] = useState(false);
   const [playingMsgId, setPlayingMsgId] = useState<string | null>(null);
@@ -1390,7 +1390,7 @@ const Tutor = ({
       await api(`/api/workspaces/${workspace.id}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: queryToSend, grounded, mode }),
+        body: JSON.stringify({ question: queryToSend, grounded: isGrounded, mode }),
       });
       await refresh();
     } finally {
@@ -1654,6 +1654,7 @@ const Tutor = ({
       <VoiceTutorModal
         workspace={workspace}
         isOpen={voiceModalOpen}
+        grounded={isGrounded}
         onClose={() => {
           stopSpeaking();
           setVoiceModalOpen(false);
