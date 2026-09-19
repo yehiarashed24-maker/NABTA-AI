@@ -1942,9 +1942,10 @@ if (process.env.NODE_ENV === 'production') {
   app.use(vite.middlewares);
 }
 
-if (process.env.NODE_ENV !== 'test') {
+if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
   await mkdir(config.uploadPath, { recursive: true });
   httpServer.listen(config.port, '127.0.0.1', () => console.log(`Nabta AI → http://127.0.0.1:${config.port} (${ai ? 'Gemini live' : 'demo mode'})`));
 }
 
+export default app;
 export { app, httpServer };
