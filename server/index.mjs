@@ -1186,10 +1186,10 @@ app.post('/api/workspaces/:id/chat', requireUser, aiLimiter, async (req, res, ne
 CRITICAL SPOKEN VOICE GUIDELINES:
 - Provide a direct, crystal-clear explanation in 2 to 3 sentences maximum (around 35-50 words total).
 - Speak warmly and naturally like a real human tutor talking aloud.
-- DO NOT use any Markdown formatting: NO asterisks (**), NO hashes (###), NO bullets (- or •), NO divider lines (---).
+- DO NOT use any Markdown formatting.
 - Speak in natural, fluent ${userLang === 'en' ? 'English' : userLang === 'fr' ? 'French' : userLang === 'es' ? 'Spanish' : userLang === 'de' ? 'German' : 'Arabic'}.
-- Do NOT include English words in parentheses alongside Arabic terms. Use clear Arabic phrases so speech synthesis flows smoothly and articulately.
-- Give the core explanation directly so the student immediately understands without having to listen to a long speech.
+- Do NOT include English words in parentheses alongside Arabic terms.
+${grounded ? `- STRICT GROUNDING IS ON: Answer ONLY from the source context below. If the topic is not mentioned in the notes, do NOT explain it; simply state in one polite spoken sentence that this topic is not in their uploaded notes and they can disable Grounded Mode for external questions.` : `- GROUNDED MODE IS OFF: You may freely answer using your broader knowledge and helpful spoken analogies.`}
 ${pageInstruction}
 
 Student Spoken Question:
@@ -1202,10 +1202,20 @@ ${contextText(relevant.slice(0, 3))}`
 Your goal is to provide a clean, beautifully organized, and crystal-clear explanation for a student.
 
 CRITICAL FORMATTING RULES:
-- DO NOT use conversational greetings (e.g. do NOT say "أهلاً بك بصفتي نبتة...").
-- DO NOT use closing boilerplate (e.g. do NOT say "أتمنى لك التوفيق...").
-- DO NOT clutter the text with stars (avoid excessive asterisks ** or *), hashes (###), blockquotes (>), or divider lines (---).
+- DO NOT use conversational greetings.
+- DO NOT use closing boilerplate.
+- DO NOT clutter the text with stars, hashes, or divider lines.
 - Keep the presentation clean, calm, and very easy on the eyes.
+
+CRITICAL STRICT GROUNDING RULES (GROUNDED MODE IS ON):
+- You MUST answer EXCLUSIVELY and ONLY from the provided Source Context below.
+- NEVER explain or answer concepts from external world knowledge.
+- If the question asks about a topic, term, or concept that is NOT found or explained in the Source Context below:
+  DO NOT explain it.
+  DO NOT give an external explanation followed by a disclaimer.
+  Immediately and politely decline to answer:
+  - If Arabic: "عذراً، هذا الموضوع غير مذكور في مذكراتك المرفوعة. يمكنك سؤالي عن محتويات مذكرتك، أو تعطيل «الوضع الموثق» إذا أردت شرحاً عاماً من خارج المذكرة."
+  - If English: "Sorry, this topic is not covered in your uploaded notebook. You can ask about your study material, or turn off Grounded Mode for a general explanation."
 
 CONTENT & PEDAGOGY:
 - Language: ALWAYS respond in fluent, natural Arabic if the question is in Arabic or relates to Arabic context.
