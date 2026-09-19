@@ -46,17 +46,19 @@ export function cleanTextForSpeech(text: string, lang = "en"): string {
   return clean;
 }
 
+let preArmedAudio: HTMLAudioElement | null = null;
+
 export function unlockAudio() {
   if (typeof window !== "undefined") {
-    // 1. Unlock Web Audio / HTML5 Audio
     try {
-      const silentAudio = new Audio();
-      silentAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
-      silentAudio.volume = 0.01;
-      silentAudio.play().catch(() => {});
+      if (!preArmedAudio) {
+        preArmedAudio = new Audio();
+      }
+      preArmedAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+      preArmedAudio.volume = 0.01;
+      preArmedAudio.play().catch(() => {});
     } catch {}
 
-    // 2. Unlock SpeechSynthesis
     if ("speechSynthesis" in window) {
       try {
         window.speechSynthesis.resume();
@@ -241,8 +243,10 @@ export function speakText(
 
   // Tier 1: Try pristine High-Fidelity audio via backend /api/tts endpoint
   const audioUrl = `/api/tts?lang=${targetLang}&text=${encodeURIComponent(cleanText.slice(0, 300))}`;
-  const audio = new Audio(audioUrl);
+  const audio = preArmedAudio || new Audio();
   activeAudioElement = audio;
+  audio.src = audioUrl;
+  audio.volume = 1.0;
 
   let hasEnded = false;
   audio.onplay = () => {
