@@ -528,7 +528,7 @@ export async function geminiText(prompt, options = {}) {
         return response.text.trim();
       }
     } catch (error) {
-      console.warn(`Gemini text failed on ${model}:`, error.message);
+      console.error(`[Gemini Error on ${model}]:`, error.message);
     }
   }
   return null;
@@ -976,6 +976,25 @@ app.use(express.json({ limit: '2mb' }));
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.maxFileMb * 1024 * 1024 }, fileFilter: (_req, file, cb) => cb(null, file.mimetype === 'application/pdf' || file.mimetype === 'text/plain') });
 
 app.get('/api/status', (_req, res) => res.json({ ok: true, aiMode: ai ? 'live' : 'demo', model: config.model, maxFileMb: config.maxFileMb }));
+app.get('/api/test-gemini', async (_req, res) => {
+  if (!ai) return res.status(503).json({ ok: false, error: 'Gemini AI not initialized (missing API key)' });
+  const models = [...new Set(config.models)];
+  const results = [];
+  for (const model of models) {
+    try {
+      const start = Date.now();
+      const response = await ai.models.generateContent({
+        model,
+        contents: 'Say hi in Arabic in 3 words.',
+        config: { temperature: 0.2 },
+      });
+      results.push({ model, success: true, text: response.text, durationMs: Date.now() - start });
+    } catch (err) {
+      results.push({ model, success: false, error: err.message });
+    }
+  }
+  res.json({ aiConfigured: Boolean(ai), keyLength: geminiApiKey ? geminiApiKey.length : 0, models, results });
+});
 app.get('/api/config', (_req, res) => res.json({ googleClientId: config.googleClientId, googleAuthEnabled: Boolean(config.googleClientId) }));
 app.get('/api/auth/me', (req, res) => { const user = userFromRequest(req); res.status(user ? 200 : 401).json(user || { error: 'Not signed in.' }); });
 app.post('/api/auth/google', async (req, res, next) => {
@@ -1156,10 +1175,11 @@ CRITICAL FORMATTING RULES:
 - Keep the presentation clean, calm, and very easy on the eyes.
 
 CONTENT & PEDAGOGY:
+- Language: ALWAYS respond in fluent, natural Arabic if the question is in Arabic or relates to Arabic context.
 - Answer STRICTLY from the provided source context below.
 - If explaining multiple-choice questions or exercises:
   For each question:
-  1. Write the question clearly.
+  1. Write the question clearly in Arabic or original language.
   2. List the options (A, B, C, D) clearly on separate lines.
   3. Clearly state the correct answer: "الإجابة الصحيحة: [الرمز] [النص]".
   4. Provide a simple, clear explanation: explain the core concept, why this choice is right, and briefly why other options are not.
@@ -1181,6 +1201,7 @@ CRITICAL FORMATTING RULES:
 - Keep the presentation clean, calm, and very easy on the eyes.
 
 CONTENT & PEDAGOGY:
+- Language: ALWAYS respond in fluent, natural Arabic if the question is in Arabic.
 - Grounded Mode is OFF: Use the sources as your foundation, expanding with clear analogies and examples.
 - If explaining questions: state the question, list options, state the correct answer, and explain clearly.
 - Preserve technical English terms in parentheses.
@@ -1918,7 +1939,8 @@ if (!process.env.VERCEL) {
     app.use(express.static(path.join(root, 'dist')));
     app.get('/{*splat}', (_req, res) => res.sendFile(path.join(root, 'dist', 'index.html')));
   } else if (process.env.NODE_ENV !== 'test') {
-    const { createServer } = await import('vite');
+    const vitePkg = 'vite';
+    const { createServer } = await import(/* @vite-ignore */ vitePkg);
     const vite = await createServer({
       root,
       server: {
