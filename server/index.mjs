@@ -1151,15 +1151,15 @@ app.post('/api/workspaces/:id/chat', requireUser, aiLimiter, async (req, res, ne
     // 1. Natural greeting interception: answer politely in the user's language without dumping random PDF chunks
     if (isConversationalGreeting(question)) {
       const gLang = req.body.language || detectGreetingLanguage(question);
-      let greetingAnswer = `Hello! I am Nabta, your smart tutor for "${view.workspace.title}". Feel free to ask me about any concept or page from your notes!`;
+      let greetingAnswer = `Hello! I am Nabta, your smart tutor for "${(view.title || "your notes")}". Feel free to ask me about any concept or page from your notes!`;
       if (gLang === 'ar') {
-        greetingAnswer = `أهلاً بك! أنا نبتة، معلمك الذكي لـ "${view.workspace.title}". تفضل بسؤالي عن أي مفهوم أو صفحة في مذكرتك، وأنا جاهز لشرحه وتبسيطه لك!`;
+        greetingAnswer = `أهلاً بك! أنا نبتة، معلمك الذكي لـ "${(view.title || "your notes")}". تفضل بسؤالي عن أي مفهوم أو صفحة في مذكرتك، وأنا جاهز لشرحه وتبسيطه لك!`;
       } else if (gLang === 'fr') {
-        greetingAnswer = `Bonjour ! Je suis Nabta, votre tuteur intelligent pour « ${view.workspace.title} ». Posez-moi vos questions sur votre cours, je suis là pour vous aider !`;
+        greetingAnswer = `Bonjour ! Je suis Nabta, votre tuteur intelligent pour « ${(view.title || "your notes")} ». Posez-moi vos questions sur votre cours, je suis là pour vous aider !`;
       } else if (gLang === 'es') {
-        greetingAnswer = `¡Hola! Soy Nabta, tu tutor inteligente para « ${view.workspace.title} ». ¡Pregúntame sobre cualquier concepto o página de tus apuntes y te ayudaré con gusto!`;
+        greetingAnswer = `¡Hola! Soy Nabta, tu tutor inteligente para « ${(view.title || "your notes")} ». ¡Pregúntame sobre cualquier concepto o página de tus apuntes y te ayudaré con gusto!`;
       } else if (gLang === 'de') {
-        greetingAnswer = `Hallo! Ich bin Nabta, dein intelligenter Tutor für „${view.workspace.title}“. Frag mich einfach nach einem Konzept oder einer Seite aus deinen Unterlagen!`;
+        greetingAnswer = `Hallo! Ich bin Nabta, dein intelligenter Tutor für „${(view.title || "your notes")}“. Frag mich einfach nach einem Konzept oder einer Seite aus deinen Unterlagen!`;
       }
 
       const now = new Date().toISOString();
@@ -1182,7 +1182,7 @@ app.post('/api/workspaces/:id/chat', requireUser, aiLimiter, async (req, res, ne
         : '';
 
       const prompt = isVoice
-        ? `You are Nabta AI (نبتة) in an interactive LIVE SPOKEN VOICE conversation with a student studying "${view.workspace.title}".
+        ? `You are Nabta AI (نبتة) in an interactive LIVE SPOKEN VOICE conversation with a student studying "${(view.title || "your notes")}".
 CRITICAL SPOKEN VOICE GUIDELINES:
 - Provide a direct, crystal-clear explanation in 2 to 3 sentences maximum (around 35-50 words total).
 - Speak warmly and naturally like a real human tutor talking aloud.

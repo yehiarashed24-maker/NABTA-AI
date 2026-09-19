@@ -148,81 +148,6 @@ function findBestVoice(voices: SpeechSynthesisVoice[], targetLangPrefix: string)
   return best || langVoices[0];
 }
 
-function speakWithWebSpeech(
-  cleanText: string,
-  targetLangPrefix: string,
-  options?: {
-    rate?: number;
-    pitch?: number;
-    onEnd?: () => void;
-    onError?: (err: any) => void;
-  }
-) {
-  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-    notifyAudioState(false);
-    options?.onError?.(new Error("Speech synthesis not supported"));
-    return;
-  }
-
-  const utterance = new SpeechSynthesisUtterance(cleanText);
-  activeUtterance = utterance;
-
-  utterance.rate = options?.rate ?? (targetLangPrefix === "ar" ? 0.98 : 1.0);
-  utterance.pitch = options?.pitch ?? (targetLangPrefix === "ar" ? 1.02 : 1.0);
-  utterance.lang = targetLangPrefix === "ar" ? "ar-SA" : "en-US";
-
-  const voices = window.speechSynthesis.getVoices();
-  const matchedVoice = findBestVoice(voices, targetLangPrefix);
-  if (matchedVoice) {
-    utterance.voice = matchedVoice;
-  }
-
-  let keepAliveTimer: any = null;
-  const clearTimer = () => {
-    if (keepAliveTimer) {
-      clearInterval(keepAliveTimer);
-      keepAliveTimer = null;
-    }
-  };
-
-  utterance.onstart = () => {
-    notifyAudioState(true);
-    clearTimer();
-    keepAliveTimer = setInterval(() => {
-      if (typeof window !== "undefined" && "speechSynthesis" in window && window.speechSynthesis.speaking) {
-        window.speechSynthesis.pause();
-        window.speechSynthesis.resume();
-      } else {
-        clearTimer();
-      }
-    }, 5000);
-  };
-
-  utterance.onend = () => {
-    clearTimer();
-    notifyAudioState(false);
-    activeUtterance = null;
-    options?.onEnd?.();
-  };
-
-  utterance.onerror = (e) => {
-    clearTimer();
-    notifyAudioState(false);
-    activeUtterance = null;
-    options?.onError?.(e);
-  };
-
-  try {
-    if (window.speechSynthesis.paused) {
-      window.speechSynthesis.resume();
-    }
-    window.speechSynthesis.speak(utterance);
-  } catch (err) {
-    clearTimer();
-    notifyAudioState(false);
-    options?.onError?.(err);
-  }
-}
 
 export function speakText(
   text: string,
@@ -234,53 +159,55 @@ export function speakText(
     onError?: (err: any) => void;
   }
 ) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+    console.warn("SpeechSynthesis not supported in this browser.");
+    options?.onError?.(new Error("Speech synthesis not supported"));
+    return;
+  }
+
   stopSpeaking();
 
   const cleanText = cleanTextForSpeech(text, lang);
   if (!cleanText) return;
 
-  const targetLang = lang.startsWith("ar") ? "ar" : "en";
+  const utterance = new SpeechSynthesisUtterance(cleanText);
+  activeUtterance = utterance;
 
-  // Tier 1: Try pristine High-Fidelity audio via backend /api/tts endpoint
-  const audioUrl = `/api/tts?lang=${targetLang}&text=${encodeURIComponent(cleanText.slice(0, 300))}`;
-  const audio = preArmedAudio || new Audio();
-  activeAudioElement = audio;
-  audio.src = audioUrl;
-  audio.volume = 1.0;
+  utterance.rate = options?.rate ?? (lang.startsWith("ar") ? 0.98 : 1.0);
+  utterance.pitch = options?.pitch ?? (lang.startsWith("ar") ? 1.02 : 1.0);
+  const targetLangPrefix = lang.startsWith("ar") ? "ar" : "en";
+  utterance.lang = targetLangPrefix === "ar" ? "ar-SA" : "en-US";
 
-  let hasEnded = false;
-  audio.onplay = () => {
+  const voices = window.speechSynthesis.getVoices();
+  const matchedVoice = findBestVoice(voices, targetLangPrefix);
+  if (matchedVoice) {
+    utterance.voice = matchedVoice;
+  }
+
+  utterance.onstart = () => {
     notifyAudioState(true);
   };
 
-  audio.onended = () => {
-    if (hasEnded) return;
-    hasEnded = true;
+  utterance.onend = () => {
     notifyAudioState(false);
-    activeAudioElement = null;
+    activeUtterance = null;
     options?.onEnd?.();
   };
 
-  audio.onerror = () => {
-    if (hasEnded) return;
-    hasEnded = true;
-    activeAudioElement = null;
-    // Fallback to Web Speech API
-    speakWithWebSpeech(cleanText, targetLang, options);
+  utterance.onerror = (e) => {
+    notifyAudioState(false);
+    activeUtterance = null;
+    options?.onError?.(e);
   };
 
   try {
-    const playPromise = audio.play();
-    if (playPromise !== undefined) {
-      playPromise.catch(() => {
-        if (hasEnded) return;
-        hasEnded = true;
-        activeAudioElement = null;
-        speakWithWebSpeech(cleanText, targetLang, options);
-      });
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
     }
-  } catch {
-    speakWithWebSpeech(cleanText, targetLang, options);
+    window.speechSynthesis.speak(utterance);
+  } catch (err) {
+    notifyAudioState(false);
+    options?.onError?.(err);
   }
 }
 

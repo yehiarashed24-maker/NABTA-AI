@@ -303,49 +303,13 @@ export const VoiceTutorModal: React.FC<VoiceTutorModalProps> = ({
           <div className="voice-wave wave-1" />
           <div className="voice-wave wave-2" />
           <div className="voice-wave wave-3" />
-          <div
-            className="voice-orb"
-            style={{ cursor: "pointer" }}
-            onClick={() => {
-              unlockAudio();
-              if (isAiSpeaking) {
-                stopSpeaking();
-                setIsAiSpeaking(false);
-              } else if (aiResponse) {
-                setIsAiSpeaking(true);
-                speakText(aiResponse, lang, {
-                  rate: speechRate,
-                  onEnd: () => setIsAiSpeaking(false),
-                  onError: () => setIsAiSpeaking(false),
-                });
-              }
-            }}
-            title={isAiSpeaking ? "Stop voice" : "Play / Replay voice"}
-          >
+          <div className="voice-orb">
             {isAiSpeaking ? <Volume2 size={36} /> : isListening ? <Mic size={36} /> : <Sparkles size={36} />}
           </div>
         </div>
 
         <div className="voice-status-badge">
           <span>{statusText}</span>
-          {aiResponse && !isAiSpeaking && (
-            <button
-              type="button"
-              className="voice-play-now-pill"
-              onClick={() => {
-                unlockAudio();
-                setIsAiSpeaking(true);
-                speakText(aiResponse, lang, {
-                  rate: speechRate,
-                  onEnd: () => setIsAiSpeaking(false),
-                  onError: () => setIsAiSpeaking(false),
-                });
-              }}
-            >
-              <Volume2 size={14} />
-              <span>{lang === "ar" ? "🔊 استمع للشرح الآن" : "🔊 Listen to explanation"}</span>
-            </button>
-          )}
         </div>
 
         {/* Conversation Stream Cards */}
