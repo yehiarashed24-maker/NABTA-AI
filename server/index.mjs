@@ -22,21 +22,22 @@ const config = {
   topK: Number(process.env.RETRIEVAL_TOP_K || 5),
   dataPath: process.env.VERCEL ? '/tmp/store.json' : path.resolve(root, process.env.DATA_PATH || './data/store.json'),
   uploadPath: process.env.VERCEL ? '/tmp/uploads' : path.resolve(root, process.env.UPLOAD_PATH || './uploads'),
-  model: process.env.GEMINI_CHAT_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
+  model: (process.env.GEMINI_CHAT_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite').trim(),
   models: [
     process.env.GEMINI_CHAT_MODEL,
     process.env.GEMINI_MODEL,
     'gemini-3.5-flash-lite',
     'gemini-3.5-flash',
     'gemini-3.6-flash',
-  ].filter(Boolean),
-  embeddingModel: process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001',
-  liveModel: process.env.GEMINI_LIVE_MODEL || 'gemini-2.0-flash-exp',
+  ].filter(Boolean).map(m => String(m).trim()),
+  embeddingModel: (process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001').trim(),
+  liveModel: (process.env.GEMINI_LIVE_MODEL || 'gemini-2.0-flash-exp').trim(),
   googleClientId: (process.env.GOOGLE_CLIENT_ID || '').trim(),
   sessionSecret: (process.env.SESSION_SECRET || 'nabta-local-development-only').trim(),
 };
 
-const ai = process.env.GEMINI_API_KEY ? new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY }) : null;
+const geminiApiKey = (process.env.GEMINI_API_KEY || '').trim();
+const ai = geminiApiKey ? new GoogleGenAI({ apiKey: geminiApiKey }) : null;
 const googleClient = config.googleClientId ? new OAuth2Client(config.googleClientId) : null;
 if (process.env.NODE_ENV === 'production' && config.googleClientId && !process.env.SESSION_SECRET) throw new Error('SESSION_SECRET is required when Google Sign-In is enabled in production.');
 const emptyStore = () => ({
@@ -53,7 +54,8 @@ const emptyStore = () => ({
   vivaAttempts: [],
 });
 
-const sql = process.env.DATABASE_URL ? neon(process.env.DATABASE_URL) : null;
+const dbUrl = (process.env.DATABASE_URL || '').trim();
+const sql = dbUrl ? neon(dbUrl) : null;
 let dbReady = false;
 
 async function ensureDb() {
