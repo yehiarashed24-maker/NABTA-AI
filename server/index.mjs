@@ -982,6 +982,29 @@ app.use(express.json({ limit: '2mb' }));
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.maxFileMb * 1024 * 1024 }, fileFilter: (_req, file, cb) => cb(null, file.mimetype === 'application/pdf' || file.mimetype === 'text/plain') });
 
 app.get('/api/status', (_req, res) => res.json({ ok: true, aiMode: ai ? 'live' : 'demo', model: config.model, maxFileMb: config.maxFileMb }));
+app.get('/api/tts', async (req, res) => {
+  try {
+    const rawText = String(req.query.text || '').slice(0, 350).trim();
+    const lang = req.query.lang === 'en' ? 'en' : req.query.lang === 'fr' ? 'fr' : req.query.lang === 'es' ? 'es' : req.query.lang === 'de' ? 'de' : 'ar';
+    if (!rawText) return res.status(400).send('No text provided');
+    
+    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${encodeURIComponent(rawText)}`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
+      },
+    });
+    if (!response.ok) throw new Error('TTS upstream returned ' + response.status);
+    
+    res.setHeader('Content-Type', 'audio/mpeg');
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    const buffer = Buffer.from(await response.arrayBuffer());
+    res.send(buffer);
+  } catch (err) {
+    console.warn('TTS proxy notice:', err.message);
+    res.status(500).json({ error: 'TTS unavailable' });
+  }
+});
 app.get('/api/test-gemini', async (_req, res) => {
   const key = (process.env.GEMINI_API_KEY || '').trim();
   let sampleCall = null;

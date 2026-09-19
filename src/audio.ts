@@ -1,4 +1,4 @@
-// Web Speech API Voice and Audio Synthesis Service for Nabta AI
+// High-Fidelity Audio & Voice Synthesis Service for Nabta AI
 
 export interface VoiceSettings {
   lang: string;
@@ -7,6 +7,8 @@ export interface VoiceSettings {
 }
 
 let activeUtterance: SpeechSynthesisUtterance | null = null;
+let activeAudioElement: HTMLAudioElement | null = null;
+let isAudioPlaying = false;
 let activeAudioListeners: Array<(isPlaying: boolean) => void> = [];
 
 export function subscribeAudioState(listener: (isPlaying: boolean) => void) {
@@ -17,6 +19,7 @@ export function subscribeAudioState(listener: (isPlaying: boolean) => void) {
 }
 
 function notifyAudioState(isPlaying: boolean) {
+  isAudioPlaying = isPlaying;
   activeAudioListeners.forEach((l) => l(isPlaying));
 }
 
@@ -43,17 +46,47 @@ export function cleanTextForSpeech(text: string, lang = "en"): string {
   return clean;
 }
 
+export function unlockAudio() {
+  if (typeof window !== "undefined") {
+    // 1. Unlock Web Audio / HTML5 Audio
+    try {
+      const silentAudio = new Audio();
+      silentAudio.src = "data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA";
+      silentAudio.volume = 0.01;
+      silentAudio.play().catch(() => {});
+    } catch {}
+
+    // 2. Unlock SpeechSynthesis
+    if ("speechSynthesis" in window) {
+      try {
+        window.speechSynthesis.resume();
+      } catch {}
+    }
+  }
+}
+
 export function stopSpeaking() {
+  if (activeAudioElement) {
+    try {
+      activeAudioElement.pause();
+      activeAudioElement.currentTime = 0;
+      activeAudioElement.src = "";
+    } catch {}
+    activeAudioElement = null;
+  }
+
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
     try {
       window.speechSynthesis.cancel();
     } catch {}
     activeUtterance = null;
-    notifyAudioState(false);
   }
+
+  notifyAudioState(false);
 }
 
 export function isSpeaking(): boolean {
+  if (isAudioPlaying) return true;
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
     return window.speechSynthesis.speaking;
   }
@@ -68,10 +101,6 @@ function findBestVoice(voices: SpeechSynthesisVoice[], targetLangPrefix: string)
   );
 
   if (targetLangPrefix === "ar") {
-    // Priority order for natural Arabic voices:
-    // 1. Google / Natural / Siri
-    // 2. High-quality Apple / Microsoft voices: Laila, Tarik, Mariam, Salma, Shakir
-    // 3. Maged (Standard macOS Arabic voice) or any available Arabic voice!
     const priorityChecks = [
       (v: SpeechSynthesisVoice) =>
         v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Online"),
@@ -95,7 +124,6 @@ function findBestVoice(voices: SpeechSynthesisVoice[], targetLangPrefix: string)
       if (found) return found;
     }
 
-    // Fallback: search across all voices for Arabic names if lang prefix filter missed
     const fallbackArabic = voices.find((v) =>
       v.name.toLowerCase().includes("arabic") ||
       v.name.toLowerCase().includes("maged") ||
@@ -107,7 +135,6 @@ function findBestVoice(voices: SpeechSynthesisVoice[], targetLangPrefix: string)
     return langVoices[0];
   }
 
-  // English or other languages
   const best = langVoices.find(
     (v) =>
       v.name.includes("Natural") ||
@@ -119,9 +146,9 @@ function findBestVoice(voices: SpeechSynthesisVoice[], targetLangPrefix: string)
   return best || langVoices[0];
 }
 
-export function speakText(
-  text: string,
-  lang: "ar" | "en" | string = "en",
+function speakWithWebSpeech(
+  cleanText: string,
+  targetLangPrefix: string,
   options?: {
     rate?: number;
     pitch?: number;
@@ -130,31 +157,20 @@ export function speakText(
   }
 ) {
   if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-    console.warn("SpeechSynthesis not supported in this browser.");
+    notifyAudioState(false);
     options?.onError?.(new Error("Speech synthesis not supported"));
     return;
   }
 
-  stopSpeaking();
-
-  const cleanText = cleanTextForSpeech(text, lang);
-  if (!cleanText) return;
-
   const utterance = new SpeechSynthesisUtterance(cleanText);
   activeUtterance = utterance;
 
-  // Configure speech rate & pitch for clear human cadence
-  utterance.rate = options?.rate ?? (lang.startsWith("ar") ? 0.98 : 1.0);
-  utterance.pitch = options?.pitch ?? (lang.startsWith("ar") ? 1.02 : 1.0);
-
-  // Language setup
-  const targetLangPrefix = lang.startsWith("ar") ? "ar" : "en";
+  utterance.rate = options?.rate ?? (targetLangPrefix === "ar" ? 0.98 : 1.0);
+  utterance.pitch = options?.pitch ?? (targetLangPrefix === "ar" ? 1.02 : 1.0);
   utterance.lang = targetLangPrefix === "ar" ? "ar-SA" : "en-US";
 
-  // Pick best available voice
   const voices = window.speechSynthesis.getVoices();
   const matchedVoice = findBestVoice(voices, targetLangPrefix);
-
   if (matchedVoice) {
     utterance.voice = matchedVoice;
   }
@@ -170,7 +186,6 @@ export function speakText(
   utterance.onstart = () => {
     notifyAudioState(true);
     clearTimer();
-    // Keep-alive timer for Chrome/macOS which can pause audio after 10-15s
     keepAliveTimer = setInterval(() => {
       if (typeof window !== "undefined" && "speechSynthesis" in window && window.speechSynthesis.speaking) {
         window.speechSynthesis.pause();
@@ -201,16 +216,68 @@ export function speakText(
     }
     window.speechSynthesis.speak(utterance);
   } catch (err) {
-    console.error("Speech synthesis failed to speak", err);
+    clearTimer();
+    notifyAudioState(false);
     options?.onError?.(err);
   }
 }
 
-// Ensure voices are loaded (Chrome/Safari async voice loading)
-if (typeof window !== "undefined" && "speechSynthesis" in window) {
-  window.speechSynthesis.onvoiceschanged = () => {
-    window.speechSynthesis.getVoices();
+export function speakText(
+  text: string,
+  lang: "ar" | "en" | string = "en",
+  options?: {
+    rate?: number;
+    pitch?: number;
+    onEnd?: () => void;
+    onError?: (err: any) => void;
+  }
+) {
+  stopSpeaking();
+
+  const cleanText = cleanTextForSpeech(text, lang);
+  if (!cleanText) return;
+
+  const targetLang = lang.startsWith("ar") ? "ar" : "en";
+
+  // Tier 1: Try pristine High-Fidelity audio via backend /api/tts endpoint
+  const audioUrl = `/api/tts?lang=${targetLang}&text=${encodeURIComponent(cleanText.slice(0, 300))}`;
+  const audio = new Audio(audioUrl);
+  activeAudioElement = audio;
+
+  let hasEnded = false;
+  audio.onplay = () => {
+    notifyAudioState(true);
   };
+
+  audio.onended = () => {
+    if (hasEnded) return;
+    hasEnded = true;
+    notifyAudioState(false);
+    activeAudioElement = null;
+    options?.onEnd?.();
+  };
+
+  audio.onerror = () => {
+    if (hasEnded) return;
+    hasEnded = true;
+    activeAudioElement = null;
+    // Fallback to Web Speech API
+    speakWithWebSpeech(cleanText, targetLang, options);
+  };
+
+  try {
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(() => {
+        if (hasEnded) return;
+        hasEnded = true;
+        activeAudioElement = null;
+        speakWithWebSpeech(cleanText, targetLang, options);
+      });
+    }
+  } catch {
+    speakWithWebSpeech(cleanText, targetLang, options);
+  }
 }
 
 export type SpeechRecognitionInstance = any;
@@ -255,14 +322,15 @@ export function createSpeechRecognizer(
         interim += event.results[i][0].transcript;
       }
     }
-    const current = final || interim;
-    if (current) {
-      callbacks.onResult(current, Boolean(final));
+    if (final) {
+      callbacks.onResult(final, true);
+    } else if (interim) {
+      callbacks.onResult(interim, false);
     }
   };
 
   recognition.onerror = (event: any) => {
-    callbacks.onError?.(event);
+    callbacks.onError?.(event.error);
   };
 
   recognition.onend = () => {
@@ -273,14 +341,14 @@ export function createSpeechRecognizer(
     start: () => {
       try {
         recognition.start();
-      } catch (err) {
-        // May already be started
+      } catch (e) {
+        console.warn("Speech recognition already running or error", e);
       }
     },
     stop: () => {
       try {
         recognition.stop();
-      } catch (err) {}
+      } catch {}
     },
     isSupported: true,
   };

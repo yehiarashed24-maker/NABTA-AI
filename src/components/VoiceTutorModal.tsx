@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Mic, MicOff, Volume2, VolumeX, X, Sparkles, RefreshCw, BookOpen } from "lucide-react";
 import { useI18n } from "../i18n";
-import { speakText, stopSpeaking, isSpeaking, createSpeechRecognizer } from "../audio";
+import { speakText, stopSpeaking, isSpeaking, createSpeechRecognizer, unlockAudio } from "../audio";
 import { Workspace } from "../types";
 
 interface VoiceTutorModalProps {
@@ -74,6 +74,7 @@ export const VoiceTutorModal: React.FC<VoiceTutorModalProps> = ({
       return;
     }
 
+    unlockAudio();
     setStatusText(t("voiceIdleState"));
 
     // Welcoming greeting on open
@@ -146,6 +147,7 @@ export const VoiceTutorModal: React.FC<VoiceTutorModalProps> = ({
   };
 
   const toggleMic = () => {
+    unlockAudio();
     if (isListening) {
       recognizerRef.current?.stop();
       setIsListening(false);
@@ -190,7 +192,14 @@ export const VoiceTutorModal: React.FC<VoiceTutorModalProps> = ({
       }
 
       const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to get AI response.");
+      }
       const reply = data.answer || data.reply || "";
+      if (!reply) {
+        throw new Error("No answer received from AI.");
+      }
+
       setAiResponse(reply);
       setStatusText(t("voiceSpeakingState"));
 
@@ -233,6 +242,7 @@ export const VoiceTutorModal: React.FC<VoiceTutorModalProps> = ({
   };
 
   const teachMeLesson = async () => {
+    unlockAudio();
     const concept = workspace.weakTopics?.[0] || workspace.concepts?.[0]?.name || "Core Lesson Concepts";
     const prompt =
       lang === "ar"
@@ -243,6 +253,7 @@ export const VoiceTutorModal: React.FC<VoiceTutorModalProps> = ({
   };
 
   const explainSimpler = () => {
+    unlockAudio();
     const prompt =
       lang === "ar"
         ? "اشرح النقطة السابقة بأسلوب أبسط في جملتين ومثال واقعي."
@@ -317,6 +328,7 @@ export const VoiceTutorModal: React.FC<VoiceTutorModalProps> = ({
                   type="button"
                   className="voice-mini-btn"
                   onClick={() => {
+                    unlockAudio();
                     if (isAiSpeaking) {
                       stopSpeaking();
                       setIsAiSpeaking(false);
