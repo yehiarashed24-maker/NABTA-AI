@@ -1474,6 +1474,7 @@ app.post('/api/workspaces/:id/quizzes', requireUser, aiLimiter, async (req, res,
     const questionType = ['mcq', 'essay', 'mixed'].includes(body.questionType) ? body.questionType : 'mcq';
     const count = Math.min(Math.max(Number(body.count) || 5, 1), 20);
     const topic = sanitizeText(body.topic).slice(0, 120);
+    const language = body.language === 'en' ? 'English' : body.language === 'fr' ? 'French' : body.language === 'es' ? 'Spanish' : body.language === 'de' ? 'German' : 'Arabic';
     const retrievedChunks = topic ? await retrieve(store, req.params.id, topic, 12) : [];
     const chunks = retrievedChunks.length ? retrievedChunks : store.chunks.filter((item) => item.workspaceId === req.params.id).slice(0, 12);
 
