@@ -45,16 +45,9 @@ export function cleanTextForSpeech(text: string, lang = "en"): string {
 
 export function stopSpeaking() {
   if (typeof window !== "undefined" && "speechSynthesis" in window) {
-    window.speechSynthesis.cancel();
-    
-    // macOS/Chrome workaround to truly clear the TTS queue
     try {
-      const workaround = new SpeechSynthesisUtterance("");
-      workaround.volume = 0;
-      window.speechSynthesis.speak(workaround);
       window.speechSynthesis.cancel();
     } catch {}
-
     activeUtterance = null;
     notifyAudioState(false);
   }
@@ -68,17 +61,17 @@ export function isSpeaking(): boolean {
 }
 
 function findBestVoice(voices: SpeechSynthesisVoice[], targetLangPrefix: string): SpeechSynthesisVoice | undefined {
+  if (!voices.length) return undefined;
+
   const langVoices = voices.filter((v) =>
     v.lang.toLowerCase().replace(/_/g, "-").startsWith(targetLangPrefix)
   );
-  if (!langVoices.length) return undefined;
 
   if (targetLangPrefix === "ar") {
     // Priority order for natural Arabic voices:
-    // 1. Google Online / Natural / Siri
+    // 1. Google / Natural / Siri
     // 2. High-quality Apple / Microsoft voices: Laila, Tarik, Mariam, Salma, Shakir
-    // 3. Any non-robotic voice (filter out Maged and compact low-res)
-    // 4. Fallback only if nothing else exists
+    // 3. Maged (Standard macOS Arabic voice) or any available Arabic voice!
     const priorityChecks = [
       (v: SpeechSynthesisVoice) =>
         v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Online"),
@@ -93,7 +86,7 @@ function findBestVoice(voices: SpeechSynthesisVoice[], targetLangPrefix: string)
         v.name.includes("Hoda") ||
         v.name.includes("Naayf"),
       (v: SpeechSynthesisVoice) =>
-        !v.name.toLowerCase().includes("maged") && !v.name.toLowerCase().includes("compact"),
+        v.name.toLowerCase().includes("maged"),
       () => true,
     ];
 
@@ -101,6 +94,17 @@ function findBestVoice(voices: SpeechSynthesisVoice[], targetLangPrefix: string)
       const found = langVoices.find(check);
       if (found) return found;
     }
+
+    // Fallback: search across all voices for Arabic names if lang prefix filter missed
+    const fallbackArabic = voices.find((v) =>
+      v.name.toLowerCase().includes("arabic") ||
+      v.name.toLowerCase().includes("maged") ||
+      v.name.toLowerCase().includes("laila") ||
+      v.name.toLowerCase().includes("tarik")
+    );
+    if (fallbackArabic) return fallbackArabic;
+
+    return langVoices[0];
   }
 
   // English or other languages
@@ -147,7 +151,7 @@ export function speakText(
   const targetLangPrefix = lang.startsWith("ar") ? "ar" : "en";
   utterance.lang = targetLangPrefix === "ar" ? "ar-SA" : "en-US";
 
-  // Pick best available voice (Google, Siri, Laila, Tarik > Maged)
+  // Pick best available voice
   const voices = window.speechSynthesis.getVoices();
   const matchedVoice = findBestVoice(voices, targetLangPrefix);
 
@@ -155,23 +159,51 @@ export function speakText(
     utterance.voice = matchedVoice;
   }
 
+  let keepAliveTimer: any = null;
+  const clearTimer = () => {
+    if (keepAliveTimer) {
+      clearInterval(keepAliveTimer);
+      keepAliveTimer = null;
+    }
+  };
+
   utterance.onstart = () => {
     notifyAudioState(true);
+    clearTimer();
+    // Keep-alive timer for Chrome/macOS which can pause audio after 10-15s
+    keepAliveTimer = setInterval(() => {
+      if (typeof window !== "undefined" && "speechSynthesis" in window && window.speechSynthesis.speaking) {
+        window.speechSynthesis.pause();
+        window.speechSynthesis.resume();
+      } else {
+        clearTimer();
+      }
+    }, 5000);
   };
 
   utterance.onend = () => {
+    clearTimer();
     notifyAudioState(false);
     activeUtterance = null;
     options?.onEnd?.();
   };
 
   utterance.onerror = (e) => {
+    clearTimer();
     notifyAudioState(false);
     activeUtterance = null;
     options?.onError?.(e);
   };
 
-  window.speechSynthesis.speak(utterance);
+  try {
+    if (window.speechSynthesis.paused) {
+      window.speechSynthesis.resume();
+    }
+    window.speechSynthesis.speak(utterance);
+  } catch (err) {
+    console.error("Speech synthesis failed to speak", err);
+    options?.onError?.(err);
+  }
 }
 
 // Ensure voices are loaded (Chrome/Safari async voice loading)
