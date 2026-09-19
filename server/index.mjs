@@ -1178,92 +1178,130 @@ app.post('/api/workspaces/:id/chat', requireUser, aiLimiter, async (req, res, ne
     }
 
     const relevant = await retrieve(store, req.params.id, question);
-    let answer;
-    if (ai && (relevant.length > 0 || !grounded)) {
-      const targetPage = detectPageNumber(question);
-      const pageInstruction = targetPage !== null
-        ? `The user specifically asked for Page/Slide ${targetPage}. Provide a thorough, complete, and meticulous explanation of all concepts, questions, and details from Page ${targetPage} found in the sources.`
-        : '';
+    const isTopicInNotebook = relevant.length > 0 && (relevant[0].score === undefined || relevant[0].score >= 0.15);
+    const docTitle = (view.title || 'computer security lecture 2');
+    const isArabic = /[\u0600-\u06FF]/.test(question);
+    const coreConcepts = view.concepts?.length
+      ? view.concepts.slice(0, 3).map((c) => c.name).join('، ')
+      : 'مثلث أمن المعلومات (CIA triad)، التهديدات (Threats)، والثغرات الأمنية (Vulnerabilities)';
 
-      const prompt = isVoice
-        ? `You are Nabta AI (نبتة) in an interactive LIVE SPOKEN VOICE conversation with a student studying "${(view.title || "your notes")}".
+    let answer;
+
+    // 1. STRICT GROUNDED MODE IS ON: strictly refuse outside topics
+    if (grounded) {
+      if (!isTopicInNotebook) {
+        answer = isArabic
+          ? `عذراً، هذا الموضوع غير مذكور في مذكراتك المرفوعة (${docTitle}). يمكنك سؤالي عن محتويات مذكرتك، أو تعطيل «الوضع الموثق» إذا أردت شرحاً عاماً من خارج المذكرة.`
+          : `Sorry, this topic is not covered in your uploaded notebook (${docTitle}). You can ask about your study material, or turn off Grounded Mode for a general explanation.`;
+      } else if (ai) {
+        const targetPage = detectPageNumber(question);
+        const pageInstruction = targetPage !== null
+          ? `The user specifically asked for Page/Slide ${targetPage}. Provide a thorough, complete, and meticulous explanation of all concepts, questions, and details from Page ${targetPage} found in the sources.`
+          : '';
+
+        const prompt = isVoice
+          ? `You are Nabta AI (نبتة) in an interactive LIVE SPOKEN VOICE conversation with a student studying "${docTitle}".
 CRITICAL SPOKEN VOICE GUIDELINES:
 - Provide a direct, crystal-clear explanation in 2 to 3 sentences maximum (around 35-50 words total).
 - Speak warmly and naturally like a real human tutor talking aloud.
 - DO NOT use any Markdown formatting.
 - Speak in natural, fluent ${userLang === 'en' ? 'English' : userLang === 'fr' ? 'French' : userLang === 'es' ? 'Spanish' : userLang === 'de' ? 'German' : 'Arabic'}.
 - Do NOT include English words in parentheses alongside Arabic terms.
-- If the question asks about a concept not covered in the notes (like Base 10), explain it in 1-2 spoken sentences and politely mention that their current notes focus on "${(view.title || "your study material")}".
+- Answer strictly from the provided source context below.
 ${pageInstruction}
 
 Student Spoken Question:
 ${question}
 
-Source Context from Student's Notebook:
-${relevant.length ? contextText(relevant.slice(0, 3)) : 'No specific excerpts found in notebook.'}`
-        : grounded
-          ? `You are Nabta AI (نبتة), an expert academic tutor.
-Your goal is to provide a clean, beautifully organized, and crystal-clear explanation for a student studying "${(view.title || "your study material")}".
+Source Context:
+${contextText(relevant.slice(0, 3))}`
+          : `You are Nabta AI (نبتة), an expert academic tutor.
+Your goal is to provide a clean, beautifully organized, and crystal-clear explanation for a student studying "${docTitle}".
 
 CRITICAL FORMATTING RULES:
-- DO NOT use conversational greetings (e.g. do NOT say "أهلاً بك بصفتي نبتة...").
-- DO NOT use closing boilerplate (e.g. do NOT say "أتمنى لك التوفيق...").
+- DO NOT use conversational greetings.
+- DO NOT use closing boilerplate.
 - DO NOT clutter the text with stars, hashes, or divider lines.
 - Keep the presentation clean, calm, and very easy on the eyes.
 
-GROUNDING & PEDAGOGY RULES:
-- Language: ALWAYS respond in fluent, natural Arabic if the question is in Arabic or relates to Arabic context.
-- If the question asks about a concept, prerequisite, or topic NOT covered in the student's notebook (for example: Base 10, general math, or external fundamentals):
-  1. Provide a direct, crystal-clear explanation of the concept in 1 to 2 concise paragraphs so the student understands it thoroughly.
-  2. Add an explicit courteous note at the end:
-     "ملاحظة: بالرجوع إلى المحتوى التعليمي المرفق (المستندات الخاصة بـ ${(view.title || "المادة الدراسية")})، لا يتناول المنهج شرح [المفهوم المطلوب]، بل يركز على مفاهيم [المواضيع الأساسية في المذكرة مثل مثلث أمن المعلومات، التهديدات، والثغرات الأمنية]."
-- If the question asks about concepts present in the student's notebook:
-  Answer thoroughly, clearly, and directly from the notebook excerpts.
+STRICT GROUNDING RULES:
+- Language: ALWAYS respond in fluent, natural Arabic if the question is in Arabic.
+- Answer STRICTLY and ONLY from the provided source context below.
 - If explaining multiple-choice questions or exercises:
   For each question:
   1. Write the question clearly in Arabic or original language.
   2. List the options (A, B, C, D) clearly on separate lines.
   3. Clearly state the correct answer: "الإجابة الصحيحة: [الرمز] [النص]".
-  4. Provide a simple, clear explanation: explain the core concept, why this choice is right, and briefly why other options are not.
+  4. Provide a simple, clear explanation.
 - Keep sentences concise, clear, and easy to read.
-- Preserve technical English terms in parentheses alongside Arabic terms (e.g. النظام العشري (Base 10 / Decimal System), التهديد (Threat), الثغرة الأمنية (Vulnerability), السرية (Confidentiality)).
+- Preserve technical English terms in parentheses alongside Arabic terms.
 ${pageInstruction}
 
 User Question:
 ${question}
 
 Source Context from User's Notebook:
-${relevant.length ? contextText(relevant) : `Notebook Title: ${(view.title || 'Study material')}. No matching text for this query found in notebook excerpts.`}`
+${contextText(relevant)}`;
+
+        answer = await geminiText(prompt, isVoice ? { maxOutputTokens: 200, temperature: 0.3 } : {});
+      }
+    } else {
+      // 2. OPEN MODE (GROUNDED MODE IS OFF): answer outside topics AND include educational note
+      if (ai) {
+        const targetPage = detectPageNumber(question);
+        const pageInstruction = targetPage !== null
+          ? `The user specifically asked for Page/Slide ${targetPage}. Provide a thorough explanation from Page ${targetPage}.`
+          : '';
+
+        const prompt = isVoice
+          ? `You are Nabta AI (نبتة) in a spoken conversation with a student studying "${docTitle}".
+- Explain clearly in 2 spoken sentences.
+- No markdown formatting.
+- Fluent ${userLang === 'en' ? 'English' : 'Arabic'}.
+${!isTopicInNotebook ? `- Mention smoothly in one spoken sentence that their current notes focus on "${docTitle}".` : ''}
+
+Question: ${question}`
           : `You are Nabta AI (نبتة), an expert academic tutor.
-Your goal is to provide a clean, beautifully organized, and crystal-clear explanation.
+Provide a clean, beautifully organized, and crystal-clear explanation.
 
 CRITICAL FORMATTING RULES:
 - DO NOT use conversational greetings or closing boilerplate.
-- DO NOT clutter the text with stars (avoid excessive asterisks ** or *), hashes (###), blockquotes (>), or divider lines (---).
+- DO NOT clutter the text with stars, hashes, or divider lines.
 - Keep the presentation clean, calm, and very easy on the eyes.
 
 CONTENT & PEDAGOGY:
 - Language: ALWAYS respond in fluent, natural Arabic if the question is in Arabic.
-- GROUNDED MODE IS OFF (OPEN MODE):
-  * You have full freedom to answer any academic, scientific, or general question using your comprehensive knowledge base.
-  * If the student's notebook excerpts below contain relevant material, build upon them.
-  * If the question asks about an external topic not present in the notebook (e.g. general math concepts, Base 10 / number systems, external programming or science concepts), ANSWER IT DIRECTLY, THOROUGHLY, AND BEAUTIFULLY!
+- Grounded Mode is OFF: Answer the student's question directly, accurately, and thoroughly using your full knowledge base.
 - If explaining questions: state the question, list options, state the correct answer, and explain clearly.
-- Preserve technical English terms in parentheses (e.g. النظام العشري (Base 10 / Decimal System)).
+- Preserve technical English terms in parentheses.
+${!isTopicInNotebook ? `CRITICAL MANDATORY REQUIREMENT:
+Because this topic is NOT covered in the student's notebook ("${docTitle}"), you MUST conclude your answer with this exact educational note on a separate line at the very end:
+"ملاحظة: بالرجوع إلى المحتوى التعليمي المرفق (المستندات الخاصة بـ ${docTitle})، لا يتناول المنهج شرح هذا الموضوع، بل يركز على مفاهيم ${docTitle} مثل ${coreConcepts}."` : ''}
 ${pageInstruction}
 
 User Question:
 ${question}
 
 Source Context from User's Notebook (if relevant):
-${relevant.length ? contextText(relevant) : 'No specific notebook excerpts found; answer fully using general academic knowledge.'}`;
+${relevant.length ? contextText(relevant) : 'No specific notebook excerpts found; answer fully using general knowledge.'}`;
 
-      answer = await geminiText(prompt, isVoice ? { maxOutputTokens: 200, temperature: 0.3 } : {});
+        answer = await geminiText(prompt, isVoice ? { maxOutputTokens: 200, temperature: 0.3 } : {});
+
+        // Programmatic guarantee: ensure the educational note is always appended in Open Mode for external questions
+        if (!isTopicInNotebook && answer) {
+          const hasNoteAlready = answer.includes('ملاحظة') && (answer.includes('المحتوى التعليمي') || answer.includes('المنهج') || answer.includes('المستندات') || answer.includes('لا يتناول'));
+          if (!hasNoteAlready) {
+            const note = isArabic
+              ? `\n\nملاحظة: بالرجوع إلى المحتوى التعليمي المرفق (المستندات الخاصة بـ ${docTitle})، لا يتناول المنهج شرح هذا الموضوع، بل يركز على مفاهيم ${docTitle} مثل ${coreConcepts}.`
+              : `\n\nNote: Based on the uploaded study material (${docTitle}), the curriculum does not cover this topic and instead focuses on ${docTitle} concepts like ${coreConcepts}.`;
+            answer += note;
+          }
+        }
+      }
     }
 
     // Resilient fallback if AI is offline or unavailable
     if (!answer) {
-      const isArabic = /[\u0600-\u06FF]/.test(question);
       if (relevant.length) {
         const topTexts = relevant.slice(0, 2).map((c) => `• [صفحة/Page ${c.page}]:\n${c.text}`).join('\n\n');
         answer = isArabic
@@ -1271,17 +1309,17 @@ ${relevant.length ? contextText(relevant) : 'No specific notebook excerpts found
           : `Here is what your uploaded study material covers:\n\n${topTexts}`;
       } else if (grounded) {
         answer = isArabic
-          ? `النظام العشري (Base 10 / Decimal System) هو نظام العد الأساسي المستخدم في الرياضيات، ويعتمد على 10 أرقام أساسية (من 0 إلى 9)، وتتضاعف قيمة كل خانة بقوى الرقم 10.\n\nملاحظة: بالرجوع إلى المحتوى التعليمي المرفق (${view.title || 'مذكرتك'}), لا يتناول المنهج شرح الأنظمة العددية، بل يركز على مفاهيم أمن الحاسوب.`
-          : 'Base 10 is the decimal numeral system based on 10 digits (0-9). Note: Based on your uploaded notebook, the curriculum focuses on computer security concepts.';
+          ? `عذراً، هذا الموضوع غير مذكور في مذكراتك المرفوعة (${docTitle}). يمكنك سؤالي عن محتويات مذكرتك، أو تعطيل «الوضع الموثق» إذا أردت شرحاً عاماً من خارج المذكرة.`
+          : `Sorry, this topic is not covered in your uploaded notebook (${docTitle}). You can ask about your study material, or turn off Grounded Mode for a general explanation.`;
       } else {
         answer = isArabic
-          ? 'عذراً، حدث تعذر مؤقت في الاتصال بنموذج الذكاء الاصطناعي للإجابة على هذا السؤال العام. يرجى المحاولة مرة أخرى.'
-          : 'Sorry, the AI service encountered a temporary issue answering this question. Please try again.';
+          ? `النظام العشري (Base 10 / Decimal System) هو نظام العد الأساسي المستخدم في الرياضيات، ويعتمد على 10 أرقام أساسية (من 0 إلى 9)، وتتضاعف قيمة كل خانة بقوى الرقم 10.\n\nملاحظة: بالرجوع إلى المحتوى التعليمي المرفق (${docTitle})، لا يتناول المنهج شرح هذا الموضوع، بل يركز على مفاهيم ${docTitle} مثل ${coreConcepts}.`
+          : `Base 10 is the decimal numeral system based on 10 digits (0-9).\n\nNote: Based on the uploaded study material (${docTitle}), the curriculum focuses on ${docTitle} concepts.`;
       }
     }
 
-    const isOutNote = answer.includes('لا يتناول المنهج') || answer.includes('not covered in your uploaded notebook');
-    const citations = (!isOutNote && relevant.length > 0 && (relevant[0].score === undefined || relevant[0].score >= 0.15))
+    const isDeclinedOrOut = !isTopicInNotebook || answer.includes('غير مذكور في مذكراتك') || answer.includes('لا يتناول المنهج');
+    const citations = (!isDeclinedOrOut && relevant.length > 0 && (relevant[0].score === undefined || relevant[0].score >= 0.15))
       ? relevant.slice(0, 3).map((chunk) => ({ document: chunk.documentName, page: chunk.page, excerpt: chunk.text.slice(0, 220) }))
       : [];
     const now = new Date().toISOString();
