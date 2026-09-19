@@ -20,8 +20,8 @@ const config = {
   chunkSize: Number(process.env.CHUNK_SIZE || 1100),
   chunkOverlap: Number(process.env.CHUNK_OVERLAP || 180),
   topK: Number(process.env.RETRIEVAL_TOP_K || 5),
-  dataPath: path.resolve(root, process.env.DATA_PATH || './data/store.json'),
-  uploadPath: path.resolve(root, process.env.UPLOAD_PATH || './uploads'),
+  dataPath: process.env.VERCEL ? '/tmp/store.json' : path.resolve(root, process.env.DATA_PATH || './data/store.json'),
+  uploadPath: process.env.VERCEL ? '/tmp/uploads' : path.resolve(root, process.env.UPLOAD_PATH || './uploads'),
   model: process.env.GEMINI_CHAT_MODEL || process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite',
   models: [
     process.env.GEMINI_CHAT_MODEL,
@@ -1911,35 +1911,37 @@ app.use((error, _req, res, _next) => {
 
 const httpServer = createHttpServer(app);
 
-if (process.env.NODE_ENV === 'production') {
-  app.use(express.static(path.join(root, 'dist')));
-  app.get('/{*splat}', (_req, res) => res.sendFile(path.join(root, 'dist', 'index.html')));
-} else if (process.env.NODE_ENV !== 'test') {
-  const { createServer } = await import('vite');
-  const vite = await createServer({
-    root,
-    server: {
-      middlewareMode: true,
-      port: config.port,
-      hmr: {
-        server: httpServer,
+if (!process.env.VERCEL) {
+  if (process.env.NODE_ENV === 'production') {
+    app.use(express.static(path.join(root, 'dist')));
+    app.get('/{*splat}', (_req, res) => res.sendFile(path.join(root, 'dist', 'index.html')));
+  } else if (process.env.NODE_ENV !== 'test') {
+    const { createServer } = await import('vite');
+    const vite = await createServer({
+      root,
+      server: {
+        middlewareMode: true,
         port: config.port,
+        hmr: {
+          server: httpServer,
+          port: config.port,
+        },
+        watch: {
+          ignored: [
+            '**/data/**',
+            '**/uploads/**',
+            '**/.env*',
+            '**/dist/**',
+            '**/server/**',
+            '**/.git/**',
+            '**/scratch/**',
+          ],
+        },
       },
-      watch: {
-        ignored: [
-          '**/data/**',
-          '**/uploads/**',
-          '**/.env*',
-          '**/dist/**',
-          '**/server/**',
-          '**/.git/**',
-          '**/scratch/**',
-        ],
-      },
-    },
-    appType: 'spa',
-  });
-  app.use(vite.middlewares);
+      appType: 'spa',
+    });
+    app.use(vite.middlewares);
+  }
 }
 
 if (process.env.NODE_ENV !== 'test' && !process.env.VERCEL) {
