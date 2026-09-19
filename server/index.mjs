@@ -983,23 +983,27 @@ const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: con
 
 app.get('/api/status', (_req, res) => res.json({ ok: true, aiMode: ai ? 'live' : 'demo', model: config.model, maxFileMb: config.maxFileMb }));
 app.get('/api/test-gemini', async (_req, res) => {
-  if (!ai) return res.status(503).json({ ok: false, error: 'Gemini AI not initialized (missing API key)' });
-  const models = [...new Set(config.models)];
-  const results = [];
-  for (const model of models) {
+  const key = (process.env.GEMINI_API_KEY || '').trim();
+  let sampleCall = null;
+  if (ai) {
     try {
-      const start = Date.now();
-      const response = await ai.models.generateContent({
-        model,
-        contents: 'Say hi in Arabic in 3 words.',
-        config: { temperature: 0.2 },
-      });
-      results.push({ model, success: true, text: response.text, durationMs: Date.now() - start });
+      const response = await Promise.race([
+        ai.models.generateContent({ model: config.model, contents: 'Say hi in Arabic in 2 words.', config: { temperature: 0.2 } }),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout after 4s')), 4000))
+      ]);
+      sampleCall = { success: true, text: response.text };
     } catch (err) {
-      results.push({ model, success: false, error: err.message });
+      sampleCall = { success: false, error: err.message };
     }
   }
-  res.json({ aiConfigured: Boolean(ai), keyLength: geminiApiKey ? geminiApiKey.length : 0, models, results });
+  res.json({
+    aiConfigured: Boolean(ai),
+    keyLength: key.length,
+    keyPrefix: key.slice(0, 8),
+    keySuffix: key.slice(-6),
+    model: config.model,
+    sampleCall,
+  });
 });
 app.get('/api/config', (_req, res) => res.json({ googleClientId: config.googleClientId, googleAuthEnabled: Boolean(config.googleClientId) }));
 app.get('/api/auth/me', (req, res) => { const user = userFromRequest(req); res.status(user ? 200 : 401).json(user || { error: 'Not signed in.' }); });
