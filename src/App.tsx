@@ -1906,7 +1906,7 @@ const QuizView = ({
                           <strong>{essayGrade.score}/100</strong>
                         </div>
 
-                        {essayGrade.correctPoints?.length > 0 && (
+                        {Array.isArray(essayGrade.correctPoints) && essayGrade.correctPoints.length > 0 && (
                           <div className="rubric-point-section positive">
                             <strong>{t("quizCorrectPoints")}</strong>
                             <ul>
@@ -1917,7 +1917,7 @@ const QuizView = ({
                           </div>
                         )}
 
-                        {essayGrade.missingPoints?.length > 0 && (
+                        {Array.isArray(essayGrade.missingPoints) && essayGrade.missingPoints.length > 0 && (
                           <div className="rubric-point-section warning">
                             <strong>{t("quizMissingPoints")}</strong>
                             <ul>
@@ -1928,7 +1928,7 @@ const QuizView = ({
                           </div>
                         )}
 
-                        {essayGrade.incorrectClaims?.length > 0 && (
+                        {Array.isArray(essayGrade.incorrectClaims) && essayGrade.incorrectClaims.length > 0 && (
                           <div className="rubric-point-section negative">
                             <strong>{t("quizIncorrectClaims")}</strong>
                             <ul>
@@ -2045,11 +2045,13 @@ const QuizView = ({
                       onChange={(e) => setAnswers({ ...answers, [question.id]: e.target.value })}
                       placeholder={t("quizShortPlaceholder")}
                     />
-                    {question.rubric && question.rubric.length > 0 && (
+                    {Array.isArray(question.rubric) && question.rubric.length > 0 && (
                       <div className="rubric-criteria-hint">
                         <span>{t("quizRubricCriteria")} </span>
                         {question.rubric.map((r, rIdx) => (
-                          <small key={rIdx}>{r.criterion} · </small>
+                          <small key={rIdx}>
+                            {typeof r === "string" ? r : (r?.criterion || String(r))} ·{" "}
+                          </small>
                         ))}
                       </div>
                     )}

@@ -781,6 +781,12 @@ function workspaceView(store, workspaceId, userId) {
     const lastAttempt = quizAttempts.at(-1) || null;
     return {
       ...quiz,
+      questions: (quiz.questions || []).map((q) => ({
+        ...q,
+        rubric: Array.isArray(q.rubric)
+          ? q.rubric.map((r) => (typeof r === 'string' ? { criterion: r, weight: 1 } : { criterion: r?.criterion || String(r), weight: Number(r?.weight) || 1 }))
+          : (typeof q.rubric === 'string' && q.rubric.trim() ? [{ criterion: q.rubric.trim(), weight: 1 }] : undefined),
+      })),
       attemptsCount: quizAttempts.length,
       bestScore,
       lastScore: lastAttempt ? lastAttempt.score : null,
@@ -1444,11 +1450,20 @@ ${contextText(chunks)}`;
           options: q.type === 'mcq' && Array.isArray(q.options)
             ? q.options.map((opt, idx) => typeof opt === 'string' ? { id: String.fromCharCode(65 + idx), text: opt } : opt)
             : undefined,
+          rubric: Array.isArray(q.rubric)
+            ? q.rubric.map((r) => (typeof r === 'string' ? { criterion: r, weight: 1 } : { criterion: r?.criterion || String(r), weight: Number(r?.weight) || 1 }))
+            : (typeof q.rubric === 'string' && q.rubric.trim() ? [{ criterion: q.rubric.trim(), weight: 1 }] : undefined),
         }));
       }
     }
 
-    questions = (questions || mockQuiz(difficulty, count, topic, questionType)).slice(0, count).map((q) => ({ id: q.id || randomUUID(), ...q }));
+    questions = (questions || mockQuiz(difficulty, count, topic, questionType)).slice(0, count).map((q) => ({
+      id: q.id || randomUUID(),
+      ...q,
+      rubric: Array.isArray(q.rubric)
+        ? q.rubric.map((r) => (typeof r === 'string' ? { criterion: r, weight: 1 } : { criterion: r?.criterion || String(r), weight: Number(r?.weight) || 1 }))
+        : (typeof q.rubric === 'string' && q.rubric.trim() ? [{ criterion: q.rubric.trim(), weight: 1 }] : undefined),
+    }));
 
     // Monotonic persistent numbering per notebook
     const workspace = store.workspaces.find((w) => w.id === req.params.id);
