@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.env
+data/*.json
+uploads/*
+!data/.gitkeep
+!uploads/.gitkeep
+.DS_Store
+scratch/
