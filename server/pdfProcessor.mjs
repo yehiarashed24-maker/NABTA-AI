@@ -4,11 +4,13 @@ import { randomUUID } from 'node:crypto';
 function collapseSpacedTokenRun(run) {
   const joined = run.replace(/\s+/g, '');
   const commonSplitWords = [
-    'PRACTICAL', 'OPEN', 'SOURCE', 'LEARNING', 'OBJECTIVES', 'MODULE', 'PART',
-    'LICENSE', 'LICENSES', 'CATEGORIES', 'PERMISSIVE', 'COPYLEFT', 'CHOOSING',
-    'APPLYING', 'COMMUNITY', 'HEALTHY', 'CONTRIBUTION', 'WORKFLOW', 'GOVERNANCE',
-    'MODELS', 'QUICK', 'REFERENCE', 'SUMMARY', 'INTRODUCTION', 'OVERVIEW',
-    'CHAPTER', 'LECTURE', 'SECTION', 'SECURITY', 'NETWORK', 'ARCHITECTURE',
+    'CONTRIBUTION', 'ARCHITECTURE', 'GOVERNANCE', 'CATEGORIES', 'PERMISSIVE',
+    'OBJECTIVES', 'REFERENCES', 'INTRODUCTION', 'PRACTICAL', 'COMMUNITY',
+    'LICENSES', 'LEARNING', 'COPYLEFT', 'CHOOSING', 'APPLYING', 'WORKFLOW',
+    'REFERENCE', 'OVERVIEW', 'SECURITY', 'MISTAKES', 'WARNINGS', 'FAMILIES',
+    'DIFFERENCE', 'HEALTHY', 'SUMMARY', 'CHAPTER', 'LECTURE', 'SECTION',
+    'NETWORK', 'LICENSE', 'MODULE', 'MODELS', 'COMMON', 'SOURCE', 'QUICK',
+    'OPEN', 'PART', 'KEY',
   ];
   let result = joined;
   for (const w of commonSplitWords) {
@@ -447,7 +449,9 @@ export function extractStructuredBlocks(pages = []) {
           /^[A-Z0-9]/.test(rawLines[i + 1])
         ) {
           const nextTitle = rawLines[i + 1].replace(/^#+\s*/, '').trim();
-          headingTitle = nextTitle;
+          headingTitle = nextTitle.toLowerCase().includes(headingTitle.toLowerCase())
+            ? nextTitle
+            : `${nextTitle} (${headingTitle})`;
           i += 2;
         } else {
           i += 1;

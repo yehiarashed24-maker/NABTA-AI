@@ -50,7 +50,7 @@ export const CustomQuizBuilderModal: React.FC<CustomQuizBuilderModalProps> = ({
 
   const [questionCount, setQuestionCount] = useState<number>(5);
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard' | 'adaptive'>('medium');
-  const [questionTypes, setQuestionTypes] = useState<string[]>(['mcq', 'true_false', 'short']);
+  const [questionTypes, setQuestionTypes] = useState<string[]>(['mcq']);
   const [showInstantFeedback, setShowInstantFeedback] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
@@ -304,69 +304,77 @@ export const CustomQuizBuilderModal: React.FC<CustomQuizBuilderModalProps> = ({
             )}
           </div>
 
-          {/* 2. Question Types Checkboxes */}
+          {/* 2. Question Types Selection */}
           <div className="quiz-setting-block">
             <label className="block-label">{t('quizTypesLabel')}:</label>
             <div className="types-selection-grid">
-              <label
+              <div
+                role="button"
+                tabIndex={0}
                 className={`type-option-card ${questionTypes.includes('mcq') ? 'active' : ''}`}
                 onClick={() => toggleQuestionType('mcq')}
               >
-                <input
-                  type="checkbox"
-                  checked={questionTypes.includes('mcq')}
-                  readOnly
-                />
+                {questionTypes.includes('mcq') ? (
+                  <CheckSquare size={18} className="text-emerald-700" style={{ flexShrink: 0, marginTop: 2 }} />
+                ) : (
+                  <Square size={18} style={{ flexShrink: 0, marginTop: 2, opacity: 0.5 }} />
+                )}
                 <div>
                   <strong>{t('quizTypeMcq')}</strong>
                   <p>4 خيارات مع إجابة صحيحة واحدة وتوضيح تربوي للخيارات.</p>
                 </div>
-              </label>
+              </div>
 
-              <label
+              <div
+                role="button"
+                tabIndex={0}
                 className={`type-option-card ${questionTypes.includes('true_false') ? 'active' : ''}`}
                 onClick={() => toggleQuestionType('true_false')}
               >
-                <input
-                  type="checkbox"
-                  checked={questionTypes.includes('true_false')}
-                  readOnly
-                />
+                {questionTypes.includes('true_false') ? (
+                  <CheckSquare size={18} className="text-emerald-700" style={{ flexShrink: 0, marginTop: 2 }} />
+                ) : (
+                  <Square size={18} style={{ flexShrink: 0, marginTop: 2, opacity: 0.5 }} />
+                )}
                 <div>
                   <strong>{t('quizTypeTrueFalse')}</strong>
                   <p>عبارات لتأكيد الفهم الدقيق والتمييز بين المفاهيم.</p>
                 </div>
-              </label>
+              </div>
 
-              <label
+              <div
+                role="button"
+                tabIndex={0}
                 className={`type-option-card ${questionTypes.includes('short') ? 'active' : ''}`}
                 onClick={() => toggleQuestionType('short')}
               >
-                <input
-                  type="checkbox"
-                  checked={questionTypes.includes('short')}
-                  readOnly
-                />
+                {questionTypes.includes('short') ? (
+                  <CheckSquare size={18} className="text-emerald-700" style={{ flexShrink: 0, marginTop: 2 }} />
+                ) : (
+                  <Square size={18} style={{ flexShrink: 0, marginTop: 2, opacity: 0.5 }} />
+                )}
                 <div>
                   <strong>{t('quizTypeShort')}</strong>
                   <p>أسئلة كتابية تقيَّم بدقة بناءً على سلم تصحيح ونقاط معيارية.</p>
                 </div>
-              </label>
+              </div>
 
-              <label
+              <div
+                role="button"
+                tabIndex={0}
                 className={`type-option-card ${questionTypes.includes('scenario') ? 'active' : ''}`}
                 onClick={() => toggleQuestionType('scenario')}
               >
-                <input
-                  type="checkbox"
-                  checked={questionTypes.includes('scenario')}
-                  readOnly
-                />
+                {questionTypes.includes('scenario') ? (
+                  <CheckSquare size={18} className="text-emerald-700" style={{ flexShrink: 0, marginTop: 2 }} />
+                ) : (
+                  <Square size={18} style={{ flexShrink: 0, marginTop: 2, opacity: 0.5 }} />
+                )}
                 <div>
                   <strong>{t('quizTypeScenario')}</strong>
                   <p>مشكلات تطبيقية وسيناريوهات تحاكي الامتحانات الواقعية.</p>
                 </div>
-              </label>
+              </div>
             </div>
           </div>
 

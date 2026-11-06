@@ -283,6 +283,36 @@ test('Flexible Quiz Generation: supports scopes, question types and monotonic nu
     assert.ok(evalResult.score >= 50, 'Accurate student answer should receive passing score');
     assert.ok(evalResult.feedback.length > 0, 'Evaluation should provide constructive feedback');
   }
+
+  // Strict single-type filtering: selecting only 'mcq' must return 100% 'mcq' questions
+  const mcqOnlyQuiz = await generateFlexibleQuiz({
+    workspace: { id: 'ws-1', title: 'Computer Networks', lastQuizNumber: 3 },
+    topics,
+    blocks,
+    sheets: [],
+    scope: { type: 'lecture' },
+    settings: {
+      questionTypes: ['mcq'],
+      difficulty: 'medium',
+      questionCount: 4,
+    },
+  });
+  assert.ok(mcqOnlyQuiz.questions.every((q) => q.type === 'mcq'), 'MCQ-only filter must never include true_false or short questions');
+
+  // Strict single-type filtering: selecting only 'true_false' must return 100% 'true_false' questions
+  const tfOnlyQuiz = await generateFlexibleQuiz({
+    workspace: { id: 'ws-1', title: 'Computer Networks', lastQuizNumber: 4 },
+    topics,
+    blocks,
+    sheets: [],
+    scope: { type: 'lecture' },
+    settings: {
+      questionTypes: ['true_false'],
+      difficulty: 'medium',
+      questionCount: 4,
+    },
+  });
+  assert.ok(tfOnlyQuiz.questions.every((q) => q.type === 'true_false'), 'True/False-only filter must return only true_false questions');
 });
 
 test('Topic Grouper & Scalability: clusters a 500-slide curriculum into coherent thematic modules covering 100% of pages without gaps', async () => {

@@ -1433,7 +1433,18 @@ app.post('/api/workspaces/:id/explanations', requireUser, aiLimiter, async (req,
     if (!workspace) return res.status(404).json({ error: 'Workspace not found.' });
     const language = ['ar_eg', 'ar_msa', 'en'].includes(req.body.language) ? req.body.language : 'ar_eg';
     const topics = (store.semanticTopics || []).filter((t) => t.workspaceId === req.params.id);
-    const blocks = (store.extractedBlocks || []).filter((b) => b.workspaceId === req.params.id);
+    const rawBlockEntries = (store.extractedBlocks || []).filter((b) => b.workspaceId === req.params.id);
+    let blocks = rawBlockEntries.flatMap((entry) => (Array.isArray(entry.blocks) ? entry.blocks : [entry]));
+    if (!blocks.length) {
+      const wsChunks = (store.chunks || []).filter((c) => c.workspaceId === req.params.id);
+      blocks = wsChunks.map((c, idx) => ({
+        id: `chunk_block_${idx}`,
+        page: c.page || 1,
+        type: 'paragraph',
+        title: `Page ${c.page || 1}`,
+        content: c.text,
+      }));
+    }
     const sheets = (store.studySheets || []).filter((s) => s.workspaceId === req.params.id);
 
     const newExplanations = await generateStructuredExplanations(topics, blocks, sheets, language, geminiJson);
@@ -1820,7 +1831,18 @@ app.post('/api/workspaces/:id/quizzes', requireUser, aiLimiter, async (req, res,
     const topic = sanitizeText(body.topic || '').slice(0, 120);
 
     const topics = (store.semanticTopics || []).filter((t) => t.workspaceId === req.params.id);
-    const blocks = (store.extractedBlocks || []).filter((b) => b.workspaceId === req.params.id);
+    const rawBlockEntries = (store.extractedBlocks || []).filter((b) => b.workspaceId === req.params.id);
+    let blocks = rawBlockEntries.flatMap((entry) => (Array.isArray(entry.blocks) ? entry.blocks : [entry]));
+    if (!blocks.length) {
+      const wsChunks = (store.chunks || []).filter((c) => c.workspaceId === req.params.id);
+      blocks = wsChunks.map((c, idx) => ({
+        id: `chunk_block_${idx}`,
+        page: c.page || 1,
+        type: 'paragraph',
+        title: `Page ${c.page || 1}`,
+        content: c.text,
+      }));
+    }
     const sheets = (store.studySheets || []).filter((s) => s.workspaceId === req.params.id);
 
     // Determine scope

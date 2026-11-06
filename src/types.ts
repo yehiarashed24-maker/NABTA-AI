@@ -62,7 +62,7 @@ export type QuestionOption = {
 
 export type Question = {
   id: string;
-  type: "mcq" | "essay" | "short";
+  type: "mcq" | "essay" | "short" | "true_false" | "scenario" | "fill_blank";
   topic: string;
   question: string;
   options?: (string | QuestionOption)[];

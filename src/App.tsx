@@ -2090,7 +2090,13 @@ const QuizView = ({
                     <span>{t("quizQuestionHeader", { current: idx + 1, total: selectedQuiz.questions.length })}</span>
                   </div>
                   <div className="badge-row">
-                    <span className="pill-sm">{q.type === "mcq" ? t("quizTypeBadgeMcq") : t("quizTypeBadgeEssay")}</span>
+                    <span className="pill-sm">
+                      {q.type === "mcq"
+                        ? t("quizTypeBadgeMcq")
+                        : q.type === "true_false"
+                          ? "True / False"
+                          : t("quizTypeBadgeEssay")}
+                    </span>
                     {q.topic && <span className="pill-sm">{q.topic}</span>}
                     {q.sourcePage && (
                       <span className="pill-sm">
@@ -2102,8 +2108,8 @@ const QuizView = ({
 
                 <h3 className="question-title">{q.question}</h3>
 
-                {/* MCQ Feedback */}
-                {q.type === "mcq" && (
+                {/* MCQ & True/False Feedback */}
+                {(q.type === "mcq" || q.type === "true_false") && (
                   <div className="mcq-feedback-body">
                     <p className="student-answer">
                       <strong>Your Answer:</strong> {answers[q.id] || "No answer provided"}
@@ -2120,7 +2126,7 @@ const QuizView = ({
                 )}
 
                 {/* Essay Deep Rubric Feedback */}
-                {q.type !== "mcq" && (
+                {q.type !== "mcq" && q.type !== "true_false" && (
                   <div className="essay-rubric-body">
                     <p className="student-essay">
                       <strong>Your Answer:</strong> {answers[q.id] || "No answer provided"}
@@ -2219,14 +2225,27 @@ const QuizView = ({
 
         <div className="questions-container">
           {selectedQuiz.questions.map((question, index) => {
-            const isMcq = question.type === "mcq";
+            const isChoiceQuestion =
+              question.type === "mcq" ||
+              question.type === "true_false" ||
+              (Array.isArray(question.options) && question.options.length > 0);
+            const displayOptions =
+              question.type === "true_false" && (!question.options || !question.options.length)
+                ? ["True", "False"]
+                : question.options || [];
 
             return (
               <article className="taking-question-card" key={question.id}>
                 <div className="question-card-meta">
                   <div className="index-pill">{String(index + 1).padStart(2, "0")}</div>
                   <div className="tag-row">
-                    <span className="pill-sm">{isMcq ? t("quizTypeBadgeMcq") : t("quizTypeBadgeEssay")}</span>
+                    <span className="pill-sm">
+                      {question.type === "mcq"
+                        ? t("quizTypeBadgeMcq")
+                        : question.type === "true_false"
+                        ? t("quizTypeTrueFalse")
+                        : t("quizTypeBadgeEssay")}
+                    </span>
                     {question.topic && <span className="pill-sm">{question.topic}</span>}
                     {question.sourcePage && (
                       <span className="pill-sm">
@@ -2238,11 +2257,16 @@ const QuizView = ({
 
                 <h3 className="question-text">{question.question}</h3>
 
-                {isMcq ? (
+                {isChoiceQuestion ? (
                   <div className="mcq-options-grid">
-                    {question.options?.map((option, optIdx) => {
+                    {displayOptions.map((option, optIdx) => {
                       const optionText = typeof option === "string" ? option : option.text;
-                      const optionKey = typeof option === "string" ? String.fromCharCode(65 + optIdx) : option.id;
+                      const optionKey =
+                        question.type === "true_false"
+                          ? String(optionText)
+                          : typeof option === "string"
+                          ? String.fromCharCode(65 + optIdx)
+                          : option.id;
                       const isSelected = answers[question.id] === optionKey || answers[question.id] === optionText;
 
                       return (
@@ -2258,7 +2282,9 @@ const QuizView = ({
                               setAnswers({ ...answers, [question.id]: optionKey })
                             }
                           />
-                          <span className="opt-letter">{String.fromCharCode(65 + optIdx)}</span>
+                          <span className="opt-letter">
+                            {question.type === "true_false" ? (optIdx === 0 ? "T" : "F") : String.fromCharCode(65 + optIdx)}
+                          </span>
                           <span className="opt-text">{optionText}</span>
                         </label>
                       );

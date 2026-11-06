@@ -12,13 +12,20 @@ export async function generateFlexibleQuiz({
   sheets = [],
   scope = { type: 'lecture' },
   settings = {},
+  count: topLevelCount,
+  questionTypes: topLevelQuestionTypes,
+  difficulty: topLevelDifficulty,
   geminiJsonFn = null,
 }) {
-  const count = Math.max(2, Math.min(25, Number(settings.questionCount || 5)));
-  const difficulty = settings.difficulty || 'medium';
-  const requestedTypes = Array.isArray(settings.questionTypes) && settings.questionTypes.length
-    ? settings.questionTypes
-    : ['mcq', 'true_false', 'short'];
+  const count = Math.max(2, Math.min(25, Number(settings.questionCount || topLevelCount || 5)));
+  const difficulty = settings.difficulty || topLevelDifficulty || 'medium';
+  const candidateTypes =
+    Array.isArray(settings.questionTypes) && settings.questionTypes.length
+      ? settings.questionTypes
+      : Array.isArray(topLevelQuestionTypes) && topLevelQuestionTypes.length
+      ? topLevelQuestionTypes
+      : ['mcq'];
+  const requestedTypes = candidateTypes.map((t) => (t === 'essay' ? 'short' : t));
 
   // 1. Filter blocks based on the selected scope
   const targetBlocks = filterBlocksByScope(blocks, topics, sheets, scope, workspace);
@@ -30,32 +37,56 @@ export async function generateFlexibleQuiz({
 
   if (typeof geminiJsonFn === 'function') {
     try {
-      questions = await callGeminiForQuiz(targetBlocks, count, difficulty, requestedTypes, geminiJsonFn);
+      const aiQuestions = await callGeminiForQuiz(targetBlocks, count, difficulty, requestedTypes, geminiJsonFn);
+      // Filter strictly to requested question types
+      questions = aiQuestions.filter((q) => {
+        const normType = q.type === 'essay' ? 'short' : q.type;
+        return requestedTypes.includes(normType);
+      });
     } catch (err) {
       console.warn('[Quiz AI Warning]: Falling back to deterministic quiz generation:', err.message);
     }
   }
 
-  if (!questions.length) {
-    questions = buildDeterministicQuiz(targetBlocks, count, difficulty, requestedTypes, topics);
+  if (questions.length < count) {
+    const fallbackQuestions = buildDeterministicQuiz(
+      targetBlocks,
+      count - questions.length,
+      difficulty,
+      requestedTypes,
+      topics
+    );
+    questions.push(...fallbackQuestions);
   }
 
-  // Ensure every question has ID, type, options, explanation, sourcePage, rubric
-  const validatedQuestions = questions.slice(0, count).map((q, idx) => ({
-    id: q.id || `q_${randomUUID().slice(0, 8)}`,
-    type: q.type || 'mcq',
-    topic: q.topic || 'General Lecture Review',
-    question: q.question || `Question ${idx + 1}`,
-    options: Array.isArray(q.options) ? q.options : undefined,
-    correctAnswer: q.correctAnswer || (q.type === 'true_false' ? 'True' : 'A'),
-    explanation: q.explanation || 'Verified from lecture notes.',
-    sourcePage: Number(q.sourcePage) || targetBlocks[0]?.page || 1,
-    rubric: Array.isArray(q.rubric) && q.rubric.length ? q.rubric : [
-      { criterion: 'Identifies core principle', weight: 40 },
-      { criterion: 'Explains technical mechanism', weight: 40 },
-      { criterion: 'Accurate terminology', weight: 20 },
-    ],
-  }));
+  // Ensure every question has ID, strictly allowed type, options, explanation, sourcePage, rubric
+  const validatedQuestions = questions.slice(0, count).map((q, idx) => {
+    const normType = q.type === 'essay' ? 'short' : q.type;
+    const finalType = requestedTypes.includes(normType) ? normType : requestedTypes[idx % requestedTypes.length];
+    return {
+      id: q.id || `q_${randomUUID().slice(0, 8)}`,
+      type: finalType,
+      topic: q.topic || 'General Lecture Review',
+      question: q.question || `Question ${idx + 1}`,
+      options:
+        finalType === 'true_false'
+          ? ['True', 'False']
+          : Array.isArray(q.options)
+          ? q.options
+          : undefined,
+      correctAnswer: q.correctAnswer || (finalType === 'true_false' ? 'True' : 'A'),
+      explanation: q.explanation || 'Verified from lecture notes.',
+      sourcePage: Number(q.sourcePage) || targetBlocks[0]?.page || 1,
+      rubric:
+        Array.isArray(q.rubric) && q.rubric.length
+          ? q.rubric
+          : [
+              { criterion: 'Identifies core principle', weight: 40 },
+              { criterion: 'Explains technical mechanism', weight: 40 },
+              { criterion: 'Accurate terminology', weight: 20 },
+            ],
+    };
+  });
 
   // Assign monotonic quiz number
   const nextQuizNum = (workspace?.lastQuizNumber || 0) + 1;
@@ -140,46 +171,54 @@ function deriveQuizTitle(scope, topics, workspace) {
 
 async function callGeminiForQuiz(blocks, count, difficulty, requestedTypes, geminiJsonFn) {
   const contextText = blocks
-    .slice(0, 15)
+    .slice(0, 25)
     .map((b) => `[Page ${b.page} | ${b.type}]: ${b.content}`)
     .join('\n\n');
+
+  const typeDescriptions = {
+    mcq: `- "mcq": 4 distinct options (["A) ...", "B) ...", "C) ...", "D) ..."]). Single unambiguous correctAnswer ("A", "B", "C", or "D").`,
+    true_false: `- "true_false": Clear factual statement from the lecture, options: ["True", "False"], correctAnswer: "True" or "False".`,
+    short: `- "short": Conceptual short-answer/essay question with a detailed reference correctAnswer and a grading rubric of 2-3 criteria (weights totalling 100).`,
+    scenario: `- "scenario": Practical real-world problem scenario testing application of the lecture concepts (format as an "mcq" or "short" with full explanation).`,
+  };
+
+  const allowedDescriptions = requestedTypes
+    .map((t) => typeDescriptions[t] || typeDescriptions.mcq)
+    .join('\n');
 
   const prompt = `You are a university exam professor creating an adaptive quiz for students.
 Create exactly ${count} high-quality, rigorously grounded exam questions based strictly on the provided lecture notes.
 
 Settings:
 - Difficulty: ${difficulty}
-- Allowed Question Types: ${requestedTypes.join(', ')}
+- STRICT ALLOWED QUESTION TYPES: ${JSON.stringify(requestedTypes)}
 
-Types to include:
-1. "mcq": 4 distinct options (A, B, C, D). Single unambiguous correct answer. Clear pedagogical explanation.
-2. "true_false": Statement, correctAnswer ("True" or "False"), explanation.
-3. "short": Conceptual essay/short question, rubric with 2-3 grading criteria and weights (totalling 100).
-4. "fill_blank": Sentence with "___" blank, correctAnswer word/phrase.
-5. "scenario": Practical problem scenario testing application of the concept.
+Allowed Question Type Specifications:
+${allowedDescriptions}
 
-CRITICAL RULES:
-- Ground all questions in the text.
-- Cite the sourcePage number accurately.
-- Return ONLY valid JSON adhering to:
+CRITICAL MANDATORY RULES:
+1. Every single generated question MUST have its "type" field set ONLY to one of: ${JSON.stringify(requestedTypes)}.
+2. DO NOT generate any question type that is not in ${JSON.stringify(requestedTypes)}! For example, if only ["mcq"] is allowed, 100% of questions MUST be "mcq" with 4 options (A, B, C, D).
+3. Ground all questions strictly in the provided Source Material and cite the exact sourcePage number.
+4. Return ONLY valid JSON adhering to:
 {
   "questions": [
     {
       "id": "q1",
-      "type": "mcq",
+      "type": "${requestedTypes[0] || 'mcq'}",
       "topic": "Topic Name",
       "question": "Clear question text?",
       "options": ["A) Option 1", "B) Option 2", "C) Option 3", "D) Option 4"],
       "correctAnswer": "A",
       "explanation": "Why this is correct based on the lecture.",
       "sourcePage": 1,
-      "rubric": [{ "criterion": "Identifies core principle", "weight": 50 }, { "criterion": "Applies formula", "weight": 50 }]
+      "rubric": [{ "criterion": "Identifies core principle", "weight": 50 }, { "criterion": "Applies concept", "weight": 50 }]
     }
   ]
 }
 
 Source Material:
-${contextText.slice(0, 4500)}`;
+${contextText.slice(0, 6000)}`;
 
   const res = await geminiJsonFn(prompt);
   if (res && Array.isArray(res.questions) && res.questions.length) {
@@ -190,103 +229,97 @@ ${contextText.slice(0, 4500)}`;
 
 function buildDeterministicQuiz(blocks, count, difficulty, requestedTypes, topics) {
   const questions = [];
+  const allowed = Array.isArray(requestedTypes) && requestedTypes.length ? requestedTypes : ['mcq'];
   const defBlocks = blocks.filter((b) => b.type === 'definition');
-  const eqBlocks = blocks.filter((b) => b.type === 'equation');
   const bulletBlocks = blocks.filter((b) => b.type === 'bullet');
   const paraBlocks = blocks.filter((b) => b.type === 'paragraph');
+  const allContentBlocks = [...defBlocks, ...bulletBlocks, ...paraBlocks, ...blocks];
 
   let qIdx = 0;
 
-  // 1. Definitions -> MCQs
-  for (const def of defBlocks) {
-    if (questions.length >= count) break;
-    qIdx++;
-
-    const otherDefs = defBlocks.filter((d) => d.term !== def.term);
-    const distractor1 = otherDefs[0]?.content?.slice(0, 70) || 'An outdated legacy protocol used in early networking.';
-    const distractor2 = otherDefs[1]?.content?.slice(0, 70) || 'A measure of memory consumption during process switching.';
-    const distractor3 = 'An optional optimization parameter disabled by default.';
-
-    questions.push({
-      id: `q_${qIdx}`,
-      type: 'mcq',
-      topic: def.term || 'Core Terminology',
-      question: `According to the lecture notes, what is the definition of "${def.term}"?`,
-      options: [
-        `A) ${def.content.slice(0, 95)}`,
-        `B) ${distractor1}`,
-        `C) ${distractor2}`,
-        `D) ${distractor3}`,
-      ],
-      correctAnswer: 'A',
-      explanation: `On page ${def.page}, "${def.term}" is explicitly defined as: ${def.content}`,
-      sourcePage: def.page,
-    });
-  }
-
-  // 2. True / False Questions
-  for (const para of paraBlocks) {
-    if (questions.length >= count) break;
-    qIdx++;
-
-    const isTrue = qIdx % 2 === 0;
-    const sentence = para.content.split('.')[0] || para.content;
-    const questionText = isTrue
-      ? `True or False: According to page ${para.page}, ${sentence}.`
-      : `True or False: The lecture states that ${sentence} is completely unnecessary and never recommended.`;
-
-    questions.push({
-      id: `q_${qIdx}`,
-      type: 'true_false',
-      topic: 'Conceptual Principles',
-      question: questionText,
-      options: ['True', 'False'],
-      correctAnswer: isTrue ? 'True' : 'False',
-      explanation: `Lecture page ${para.page} explicitly clarifies: "${sentence}".`,
-      sourcePage: para.page,
-    });
-  }
-
-  // 3. Short Answer / Essay with Rubric
-  for (const bb of bulletBlocks) {
-    if (questions.length >= count) break;
-    qIdx++;
-
-    questions.push({
-      id: `q_${qIdx}`,
-      type: 'short',
-      topic: bb.title || 'Technical Process Walkthrough',
-      question: `In your own words, explain the core mechanism discussed on page ${bb.page}. Mention at least two key components.`,
-      correctAnswer: bb.content,
-      explanation: `Key points from page ${bb.page} include: ${bb.content}`,
-      sourcePage: bb.page,
-      rubric: [
-        { criterion: 'Explains foundational objective', weight: 40 },
-        { criterion: 'Cites at least two distinct steps/components', weight: 40 },
-        { criterion: 'Uses correct academic terminology', weight: 20 },
-      ],
-    });
-  }
-
-  // Fallback if needed
   while (questions.length < count) {
+    const targetType = allowed[qIdx % allowed.length];
+    const b = allContentBlocks[qIdx % (allContentBlocks.length || 1)] || {
+      page: 1,
+      title: 'Core Lecture Concept',
+      content: 'Foundational principle from the uploaded lecture.',
+    };
     qIdx++;
-    const b = blocks[qIdx % (blocks.length || 1)];
-    questions.push({
-      id: `q_${qIdx}`,
-      type: 'mcq',
-      topic: 'Lecture Review',
-      question: `Which of the following concepts is directly addressed on page ${b?.page || 1}?`,
-      options: [
-        `A) ${(b?.content || 'Core lecture foundation').slice(0, 80)}`,
-        'B) High-frequency asynchronous clock drift mitigation',
-        'C) Quantum entanglement key distribution',
-        'D) Zero-knowledge spatial partitioning algorithms',
-      ],
-      correctAnswer: 'A',
-      explanation: `Verified from source page ${b?.page || 1}.`,
-      sourcePage: b?.page || 1,
-    });
+
+    if (targetType === 'mcq') {
+      const def = defBlocks[(qIdx - 1) % (defBlocks.length || 1)];
+      if (def && qIdx <= defBlocks.length + 1) {
+        const otherDefs = defBlocks.filter((d) => d.term !== def.term);
+        const distractor1 = otherDefs[0]?.content?.slice(0, 85) || 'Unrelated mechanism outside the scope of this module.';
+        const distractor2 = otherDefs[1]?.content?.slice(0, 85) || 'Reverse operation that bypasses standard verification.';
+        const distractor3 = otherDefs[2]?.content?.slice(0, 85) || 'Optional configuration disabled by default.';
+        questions.push({
+          id: `q_${qIdx}`,
+          type: 'mcq',
+          topic: def.term || 'Core Terminology',
+          question: `According to page ${def.page} of the lecture notes, which statement accurately defines "${def.term}"?`,
+          options: [
+            `A) ${def.content.slice(0, 110)}`,
+            `B) ${distractor1}`,
+            `C) ${distractor2}`,
+            `D) ${distractor3}`,
+          ],
+          correctAnswer: 'A',
+          explanation: `On page ${def.page}, "${def.term}" is defined as: ${def.content}`,
+          sourcePage: def.page,
+        });
+      } else {
+        const snippet = (b.points?.[0] || b.content || 'Core lecture principle').slice(0, 110);
+        questions.push({
+          id: `q_${qIdx}`,
+          type: 'mcq',
+          topic: b.title || 'Lecture Review',
+          question: `Which of the following points is explicitly stated in the lecture material on page ${b.page || 1}?`,
+          options: [
+            `A) ${snippet}`,
+            'B) The lecture states that this requirement is obsolete and should be ignored',
+            'C) All verification and licensing constraints are automatically waived',
+            'D) None of the principles apply to real-world implementations',
+          ],
+          correctAnswer: 'A',
+          explanation: `Grounded directly in page ${b.page || 1}: "${snippet}".`,
+          sourcePage: b.page || 1,
+        });
+      }
+    } else if (targetType === 'true_false') {
+      const isTrue = qIdx % 2 === 1;
+      const rawSentence = (b.points?.[0] || b.content || 'This principle is essential').split('.')[0];
+      const questionText = isTrue
+        ? `True or False: According to page ${b.page || 1}, ${rawSentence}.`
+        : `True or False: According to page ${b.page || 1}, ${rawSentence} is completely false and never applicable.`;
+      questions.push({
+        id: `q_${qIdx}`,
+        type: 'true_false',
+        topic: b.title || 'Conceptual Principles',
+        question: questionText,
+        options: ['True', 'False'],
+        correctAnswer: isTrue ? 'True' : 'False',
+        explanation: `Page ${b.page || 1} states: "${rawSentence}".`,
+        sourcePage: b.page || 1,
+      });
+    } else {
+      // 'short' / 'essay' / 'scenario'
+      const sb = paraBlocks[(qIdx - 1) % (paraBlocks.length || 1)] || defBlocks[(qIdx - 1) % (defBlocks.length || 1)] || b;
+      questions.push({
+        id: `q_${qIdx}`,
+        type: targetType === 'scenario' ? 'scenario' : 'short',
+        topic: sb.title || 'Conceptual Walkthrough',
+        question: `Explain the key principle and practical importance of "${sb.title || 'the concept'}" covered on page ${sb.page || 1}.`,
+        correctAnswer: sb.content,
+        explanation: `Key points from page ${sb.page || 1}: ${sb.content}`,
+        sourcePage: sb.page || 1,
+        rubric: [
+          { criterion: 'Explains foundational objective accurately', weight: 40 },
+          { criterion: 'Mentions key details from the lecture slide', weight: 40 },
+          { criterion: 'Uses accurate terminology', weight: 20 },
+        ],
+      });
+    }
   }
 
   return questions;
