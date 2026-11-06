@@ -648,7 +648,7 @@ const AppSidebar = ({
       .toUpperCase() || "N";
   return (
     <aside className="app-sidebar">
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+      <div className="sidebar-brand-row" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
         <Brand light />
         <LanguageSwitcher variant="pill" />
       </div>

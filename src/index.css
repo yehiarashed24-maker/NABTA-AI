@@ -7452,3 +7452,390 @@ body.rtl .original-pdf-window {
   color: #78350f;
   cursor: pointer;
 }
+
+/* ==========================================================================
+   MOBILE APP EXPERIENCE (PWA / NATIVE MOBILE WEB BROWSER POLISH)
+   ========================================================================== */
+@media (max-width: 768px) {
+  html,
+  body {
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Native Frosted-Glass Bottom Navigation Bar */
+  .app-sidebar {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: calc(64px + env(safe-area-inset-bottom, 0px));
+    width: 100%;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+    background: rgba(16, 38, 30, 0.96);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-top: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 -6px 24px rgba(0, 0, 0, 0.18);
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-around;
+    z-index: 1000;
+  }
+
+  .app-sidebar .sidebar-brand-row,
+  .app-sidebar .brand,
+  .sidebar-grow,
+  .profile {
+    display: none !important;
+  }
+
+  .app-nav {
+    margin: 0;
+    flex-direction: row;
+    width: 100%;
+    justify-content: space-around;
+    align-items: center;
+    gap: 2px;
+  }
+
+  .app-nav button,
+  .app-nav button:not(.active) {
+    flex: 1;
+    min-width: 0;
+    height: 50px;
+    padding: 4px 2px;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    font-size: 9.5px !important;
+    font-weight: 600;
+    line-height: 1.1;
+    color: rgba(255, 255, 255, 0.68);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .app-nav button svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+
+  .app-nav button.active {
+    background: rgba(201, 242, 119, 0.16);
+    color: #c9f277;
+    font-size: 9.5px !important;
+  }
+
+  .app-nav button.active::after {
+    display: none;
+  }
+
+  /* Dashboard Mobile App Header & Cards */
+  .dashboard {
+    padding: 18px 14px calc(88px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+    padding-bottom: 18px;
+  }
+
+  .app-header .header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .new-button {
+    width: auto !important;
+    height: 40px !important;
+    padding: 0 16px !important;
+    font-size: 13px !important;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Study Workspace App Header & Sticky Pill Tabs */
+  .study-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    background: rgba(244, 243, 237, 0.95);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    height: auto;
+    min-height: 0;
+    padding: 12px 14px;
+    flex-wrap: wrap;
+    gap: 10px;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .study-header > div:nth-child(2) {
+    flex: 1;
+    min-width: 180px;
+  }
+
+  .study-header h1 {
+    font-size: 17px;
+    line-height: 1.25;
+    margin: 2px 0;
+    display: -webkit-box;
+    -webkit-line-clamp: 1;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .study-header p {
+    font-size: 11.5px;
+  }
+
+  .study-header .header-actions {
+    width: 100%;
+    margin-left: 0 !important;
+    justify-content: space-between;
+    gap: 8px !important;
+    padding-top: 6px;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+  }
+
+  .study-header .header-actions .subtle-button {
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+    border-radius: 8px !important;
+  }
+
+  .study-tabs {
+    position: sticky;
+    top: 0;
+    z-index: 35;
+    background: #faf9f5;
+    padding: 8px 12px;
+    gap: 6px;
+    justify-content: flex-start;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    border-bottom: 1px solid var(--line);
+  }
+
+  .study-tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .study-tabs button {
+    flex-shrink: 0;
+    height: 36px;
+    padding: 0 12px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    gap: 6px;
+    border: 1px solid transparent;
+  }
+
+  .study-tabs button.active {
+    background: var(--forest);
+    color: #ffffff;
+    border-bottom-color: transparent;
+  }
+
+  .study-content {
+    padding: 12px 10px calc(86px + env(safe-area-inset-bottom, 0px));
+    min-height: calc(100vh - 160px);
+  }
+
+  /* Study Sheets Mobile App Layout */
+  .study-sheets-container {
+    gap: 12px;
+  }
+
+  .sheets-toolbar {
+    padding: 10px 12px;
+    border-radius: 12px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .toolbar-left,
+  .toolbar-right {
+    width: 100%;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .view-toggle-pills {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pill-btn {
+    justify-content: center;
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+
+  .sheet-nav-controls {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .sheet-select-dropdown {
+    flex: 1;
+    max-width: none;
+    font-size: 12.5px;
+    padding: 7px 10px;
+  }
+
+  .zoom-controls {
+    display: none;
+  }
+
+  .toolbar-right .action-btn {
+    flex: 1;
+    justify-content: center;
+    padding: 8px 10px;
+    font-size: 12px;
+    border-radius: 8px;
+  }
+
+  .sheet-canvas-wrapper {
+    padding: 10px;
+    min-height: 280px;
+    border-radius: 12px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .meta-card,
+  .cards-outline-box {
+    padding: 14px;
+    border-radius: 12px;
+  }
+
+  /* Explanations Mobile App Layout (Horizontal Swipeable Topic Chips) */
+  .explanations-header-bar {
+    padding: 12px 14px;
+    border-radius: 12px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .style-selector-box {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+
+  .style-pills {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  .style-pill {
+    padding: 7px 6px;
+    font-size: 11.5px;
+    text-align: center;
+  }
+
+  .topics-sidebar-nav {
+    position: static;
+    padding: 12px;
+    border-radius: 12px;
+  }
+
+  .topics-menu-list {
+    flex-direction: row;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 8px;
+    padding-bottom: 2px;
+  }
+
+  .topics-menu-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  .topic-menu-item {
+    flex-shrink: 0;
+    max-width: 230px;
+    padding: 8px 12px;
+    border: 1px solid var(--line);
+    background: var(--paper);
+  }
+
+  .topic-menu-item .arrow-icon {
+    display: none;
+  }
+
+  .topic-hero-card,
+  .explanation-section-card,
+  .definitions-section-card,
+  .process-section-card,
+  .examples-section-card,
+  .comparisons-section-card,
+  .diagram-explain-card,
+  .grounding-audit-card,
+  .takeaways-card {
+    padding: 16px 14px;
+    border-radius: 12px;
+  }
+
+  .topic-title {
+    font-size: 19px;
+  }
+
+  .topic-action-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .strip-btn {
+    justify-content: center;
+    padding: 9px 10px;
+    font-size: 12px;
+  }
+
+  /* Full-Screen Native Mobile Drawers & Modals */
+  .original-pdf-window {
+    width: 100vw;
+    max-width: 100vw;
+  }
+
+  .coverage-modal-card,
+  .custom-quiz-modal {
+    width: 96%;
+    max-height: 88vh;
+    border-radius: 16px;
+  }
+
+  .coverage-score-hero {
+    flex-direction: column;
+    text-align: center;
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .score-summary-stats {
+    width: 100%;
+  }
+}
