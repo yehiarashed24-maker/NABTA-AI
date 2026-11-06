@@ -26,10 +26,10 @@ export async function generateStructuredExplanations(
 
   const topicExplanations = [];
 
-  // Batch AI explanation generation in chunks of up to 6 topics per call to avoid quota exhaustion & speed up response
+  // Batch AI explanation generation in chunks of 2 topics per call so each topic gets a massive token budget for exhaustive explanations
   const aiExplanationsByTopicId = new Map();
   if (typeof geminiJsonFn === 'function' && topics.length > 0) {
-    const batchSize = 6;
+    const batchSize = 2;
     for (let i = 0; i < topics.length; i += batchSize) {
       const batchTopics = topics.slice(i, i + batchSize);
       try {
@@ -54,7 +54,7 @@ export async function generateStructuredExplanations(
 
     let explanationData = aiExplanationsByTopicId.get(topic.id) || null;
 
-    if (!explanationData && typeof geminiJsonFn === 'function' && topics.length === 1) {
+    if (!explanationData && typeof geminiJsonFn === 'function') {
       try {
         explanationData = await callGeminiForTopicExplanation(topic, topicBlocks, targetLang, geminiJsonFn);
       } catch (err) {
@@ -65,6 +65,9 @@ export async function generateStructuredExplanations(
     if (!explanationData || !explanationData.overview) {
       explanationData = buildDeterministicTopicExplanation(topic, topicBlocks, targetLang);
     }
+
+    // Guarantee 100% complete, un-summarized coverage by merging all verbatim lecture blocks, definitions, and page breakdowns
+    explanationData = enrichWithCompleteLectureBlocks(explanationData, topic, topicBlocks, targetLang);
 
     topicExplanations.push({
       topicId: topic.id,
@@ -96,11 +99,11 @@ export async function generateStructuredExplanations(
 async function callGeminiForBatchedTopics(batchTopics, allBlocks, language, geminiJsonFn) {
   let styleInstruction = '';
   if (language === 'ar_eg') {
-    styleInstruction = `Write ALL explanations, overviews, analogies, definitions meanings, steps, examples, and takeaways in friendly, natural Egyptian Arabic (اللهجة المصرية العامية المبسطة الذكية زي دكتور جامعة بيشرح لطلابه)، while keeping technical English terms in parentheses.`;
+    styleInstruction = `Write ALL explanations, overviews, analogies, definitions meanings, steps, examples, comparisons, and takeaways in warm, detailed, natural Egyptian Arabic (اللهجة المصرية العامية المبسطة والغنية بالتفاصيل زي دكتور جامعة شاطر بيشرح كل تفصيلة لطلابه ومش بيسيب ولا كلمة من غير توضيح)، while keeping technical English terms in parentheses.`;
   } else if (language === 'ar_msa') {
-    styleInstruction = `Write ALL explanations, overviews, analogies, definitions meanings, steps, examples, and takeaways in formal academic Modern Standard Arabic (اللغة العربية الفصحى الأكاديمية الرصينة) with English technical terms in parentheses.`;
+    styleInstruction = `Write ALL explanations, overviews, analogies, definitions meanings, steps, examples, comparisons, and takeaways in exhaustive, formal academic Modern Standard Arabic (اللغة العربية الفصحى الأكاديمية الرصينة والمفصلة) with English technical terms in parentheses.`;
   } else {
-    styleInstruction = `Write ALL explanations, overviews, analogies, definitions, steps, examples, and takeaways in clear, engaging academic English.`;
+    styleInstruction = `Write ALL explanations, overviews, analogies, definitions, steps, examples, comparisons, and takeaways in exhaustive, clear academic English.`;
   }
 
   const topicsPayload = batchTopics.map((t) => {
@@ -110,97 +113,223 @@ async function callGeminiForBatchedTopics(batchTopics, allBlocks, language, gemi
       title: t.title,
       sourcePages: t.sourcePages,
       sourceMaterial: tBlocks
-        .map((b) => `[p.${b.page} ${b.type}] ${b.content}`)
+        .map((b) => `[Page ${b.page} | ${b.type} | ${b.title || ''}]: ${b.points ? b.points.join(' ; ') : b.content}`)
         .join('\n')
-        .slice(0, 2200),
+        .slice(0, 8000),
     };
   });
 
-  const prompt = `You are a master university educator and AI tutor in Nabta AI.
-Generate comprehensive, structured explanations for each of the following ${batchTopics.length} lecture topics.
+  const prompt = `You are a master university professor and AI tutor in Nabta AI.
+Generate an EXHAUSTIVE, COMPLETE, UN-SUMMARIZED explanation for each of the following ${batchTopics.length} lecture topics.
 
-Language & Style Requirement (MANDATORY):
-${styleInstruction}
+CRITICAL ANTI-SUMMARIZATION RULES (MANDATORY):
+1. DO NOT SUMMARIZE OR ABBREVIATE! The student wants a 100% COMPLETE explanation of every single slide, page, bullet point, file, concept, and rule in the source material.
+2. Language & Style Requirement:
+   ${styleInstruction}
+3. For "detailedExplanation":
+   - Write at least 5 to 8 rich, detailed paragraphs separated by "\\n\\n".
+   - Walk through EVERY SINGLE page/slide in "sourcePages" in order (e.g., start paragraphs with "📌 صفحة X ([Slide Title]): ..." in Arabic or "📌 Page X ([Slide Title]): ..." in English).
+   - Explain EVERY bullet point, sub-point, mechanism, why it matters, and how it works in practice so the student does not miss a single detail from the lecture.
+4. For "definitions":
+   - Include ALL terms, concepts, files, licenses, or roles mentioned across these pages (at least 4 to 8 definitions per topic, each with a thorough 2-3 sentence explanation).
+5. For "stepByStepProcesses":
+   - Include at least 4 to 6 sequential steps explaining the full workflow/process in detail (2-3 sentences per step).
+6. For "practicalExamples":
+   - Include at least 3 to 4 concrete, detailed real-world scenarios or code/project examples.
+7. For "conceptComparisons":
+   - Include at least 2 to 4 detailed comparisons contrasting the concepts/models in this topic.
+8. For "keyTakeaways", "sourceGroundedPoints", and "supplementaryAiPoints":
+   - Include at least 5 to 8 comprehensive points in each array.
 
 Output strictly valid JSON matching this exact schema:
 {
   "topics": [
     {
       "topicId": "exact topicId from input",
-      "overview": "2-3 sentence engaging overview in the requested language",
-      "detailedExplanation": "Thorough multi-paragraph explanation of all concepts in the topic in the requested language",
-      "simplifiedAnalogy": "Intuitive real-life analogy in the requested language",
+      "overview": "4-5 sentence comprehensive overview covering the full scope of the topic in the requested language",
+      "detailedExplanation": "Exhaustive 5-8 paragraph slide-by-slide and page-by-page explanation covering 100% of the lecture material without any summarization, separated by \\n\\n",
+      "simplifiedAnalogy": "Detailed, vivid 4-5 sentence real-life analogy mapping every part of the concept in the requested language",
       "definitions": [
-        { "term": "Term", "meaning": "Clear definition in the requested language", "sourcePages": [1] }
+        { "term": "Term", "meaning": "Detailed 2-3 sentence definition and importance in the requested language", "sourcePages": [1] }
       ],
       "stepByStepProcesses": [
-        { "step": 1, "action": "Step title", "explanation": "Step details in the requested language" }
+        { "step": 1, "action": "Step title", "explanation": "Detailed 2-3 sentence step explanation in the requested language" }
       ],
-      "practicalExamples": ["Concrete real-world example in the requested language"],
+      "practicalExamples": ["Detailed real-world example 1", "Detailed real-world example 2", "Detailed real-world example 3"],
       "conceptComparisons": [
-        { "conceptA": "Concept A", "conceptB": "Concept B", "difference": "Core distinction in the requested language" }
+        { "conceptA": "Concept A", "conceptB": "Concept B", "difference": "Thorough comparison of pros, cons, and differences in the requested language" }
       ],
-      "diagramOrTableExplanation": "Explanation of key relationships or tables in the requested language",
-      "keyTakeaways": ["Key exam takeaway 1", "Key exam takeaway 2"],
-      "sourceGroundedPoints": ["Direct point from the lecture slides in the requested language"],
-      "supplementaryAiPoints": ["Helpful extra context/insight from the AI tutor in the requested language"]
+      "diagramOrTableExplanation": "Detailed multi-sentence walkthrough of all structures, checklists, tables, or architectures in these pages",
+      "keyTakeaways": ["Detailed exam takeaway 1", "Detailed exam takeaway 2", "Detailed exam takeaway 3", "Detailed exam takeaway 4", "Detailed exam takeaway 5"],
+      "sourceGroundedPoints": ["Complete point 1 from the slides", "Complete point 2 from the slides", "Complete point 3 from the slides", "Complete point 4 from the slides"],
+      "supplementaryAiPoints": ["Deep tutor insight 1", "Common exam trap 2", "Practical engineering tip 3", "Conceptual connection 4"]
     }
   ]
 }
 
-Topics & Source Material:
+Topics & Full Source Material:
 ${JSON.stringify(topicsPayload, null, 2)}`;
 
   return await geminiJsonFn(prompt);
 }
 
 async function callGeminiForTopicExplanation(topic, blocks, language, geminiJsonFn) {
-  let styleInstruction = '';
-  if (language === 'ar_eg') {
-    styleInstruction = `Use friendly, warm Egyptian Arabic for explanations (اللهجة المصرية العامية المبسطة الذكية)، مثل أسلوب أستاذ جامعي أو مهندس يشرح لطلابه بطريقة سلسة ومشوقة، مع الاحتفاظ بجميع المصطلحات العلمية الإنجليزية وترجمتها.`;
-  } else if (language === 'ar_msa') {
-    styleInstruction = `Use formal academic Modern Standard Arabic (اللغة العربية الفصحى الأكاديمية الرصينة) with precise technical terminology and rigorous explanations.`;
-  } else {
-    styleInstruction = `Use clear, academic and engaging English, explaining technical concepts thoroughly with intuitive analogies.`;
-  }
-
-  const contextText = blocks.map((b) => `[Page ${b.page} | ${b.type}]: ${b.content}`).join('\n\n');
-
-  const prompt = `You are a master educator and AI tutor in Nabta AI.
-Create an exhaustive, structured explanation for the topic: "${topic.title}".
-
-Style Guidelines:
-${styleInstruction}
-
-CRITICAL RULES:
-1. Ground the explanation in the provided source material.
-2. Distinctly separate points explicitly stated in the PDF ("sourceGroundedPoints") from pedagogical analogies/background added by AI ("supplementaryAiPoints").
-3. Include step-by-step processes, real-world examples, and comparisons.
-4. Output strictly valid JSON matching:
-{
-  "overview": "Engaging high-level pedagogical overview of the topic.",
-  "detailedExplanation": "Thorough, step-by-step conceptual walkthrough.",
-  "simplifiedAnalogy": "Intuitive real-life analogy explaining the core idea.",
-  "definitions": [
-    { "term": "Term", "meaning": "Precise definition", "sourcePages": [1] }
-  ],
-  "stepByStepProcesses": [
-    { "step": 1, "action": "Action Name", "explanation": "Detailed mechanism" }
-  ],
-  "practicalExamples": ["Concrete scenario or application"],
-  "conceptComparisons": [
-    { "conceptA": "A", "conceptB": "B", "difference": "Key difference" }
-  ],
-  "diagramOrTableExplanation": "Walkthrough of related tables, formulas, or diagrams.",
-  "keyTakeaways": ["Core takeaway to remember for exams"],
-  "sourceGroundedPoints": ["Explicit fact 1 directly from the lecture notes"],
-  "supplementaryAiPoints": ["Helpful context/analogy provided by AI tutor"]
+  const res = await callGeminiForBatchedTopics([topic], blocks, language, geminiJsonFn);
+  return res?.topics?.[0] || null;
 }
 
-Source Material:
-${contextText.slice(0, 4500)}`;
+/**
+ * Post-processes AI or deterministic explanation data to guarantee that 100% of original
+ * lecture blocks, definitions, bullet points, and page-by-page details are present without omission.
+ */
+function enrichWithCompleteLectureBlocks(explanationData, topic, blocks, language) {
+  const isArabic = language === 'ar_eg' || language === 'ar_msa';
+  const isEgyptian = language === 'ar_eg';
 
-  return await geminiJsonFn(prompt);
+  const data = { ...explanationData };
+
+  // 1. Ensure ALL definitions from the lecture blocks (and colon-delimited terms in bullets) are included
+  const existingTerms = new Set(
+    (data.definitions || []).map((d) => String(d.term || '').toLowerCase().trim())
+  );
+  const mergedDefs = [...(data.definitions || [])];
+
+  for (const b of blocks) {
+    if (b.type === 'definition' && (b.term || b.title)) {
+      const termKey = String(b.term || b.title).toLowerCase().trim();
+      if (!existingTerms.has(termKey)) {
+        existingTerms.add(termKey);
+        mergedDefs.push({
+          term: b.term || b.title,
+          meaning: b.content,
+          sourcePages: [b.page],
+        });
+      }
+    } else if (b.type === 'bullet' && Array.isArray(b.points)) {
+      for (const pt of b.points) {
+        const colonIdx = String(pt).indexOf(':');
+        if (colonIdx > 1 && colonIdx <= 42) {
+          const termCand = String(pt).slice(0, colonIdx).trim();
+          const meanCand = String(pt).slice(colonIdx + 1).trim();
+          const termKey = termCand.toLowerCase();
+          if (termCand.length >= 2 && meanCand.length >= 10 && !existingTerms.has(termKey)) {
+            existingTerms.add(termKey);
+            mergedDefs.push({
+              term: termCand,
+              meaning: meanCand,
+              sourcePages: [b.page],
+            });
+          }
+        }
+      }
+    }
+  }
+  data.definitions = mergedDefs;
+
+  // 2. Build a complete Page-by-Page Verbatim Slide Breakdown from blocks and append if not already present
+  const pagesMap = new Map();
+  for (const b of blocks) {
+    const p = b.page || 1;
+    if (!pagesMap.has(p)) pagesMap.set(p, []);
+    pagesMap.get(p).push(b);
+  }
+
+  const pageBreakdowns = [];
+  for (const [pageNum, pBlocks] of [...pagesMap.entries()].sort((a, b) => a[0] - b[0])) {
+    const headings = pBlocks
+      .filter((b) => b.type === 'heading' || b.type === 'subheading')
+      .map((b) => b.content)
+      .join(' — ');
+    const details = [];
+    for (const b of pBlocks) {
+      if (b.type === 'heading' || b.type === 'subheading') continue;
+      if (b.type === 'definition') {
+        details.push(`• ${b.term || b.title}: ${b.content}`);
+      } else if (b.type === 'bullet' && Array.isArray(b.points) && b.points.length) {
+        for (const pt of b.points) {
+          details.push(`• ${pt}`);
+        }
+      } else if (b.content) {
+        details.push(`• ${b.content}`);
+      }
+    }
+    if (!details.length && headings) {
+      details.push(`• ${headings}`);
+    }
+    if (details.length) {
+      const headerLabel = isEgyptian
+        ? `📄 تفصيل محتوى صفحة ${pageNum}${headings ? ` (${headings})` : ''} بالكامل من المحاضرة:`
+        : isArabic
+        ? `📄 التفصيل الكامل لمحتوى صفحة ${pageNum}${headings ? ` (${headings})` : ''} من المذكرة:`
+        : `📄 Complete Slide Breakdown — Page ${pageNum}${headings ? ` (${headings})` : ''}:`;
+      pageBreakdowns.push(`${headerLabel}\n${details.join('\n')}`);
+    }
+  }
+
+  const existingDetailed = String(data.detailedExplanation || '').trim();
+  if (pageBreakdowns.length > 0) {
+    const sectionDivider = isEgyptian
+      ? '━━━ النص والتفصيل الكامل لكل صفحة وسلايد في هذا الموضوع (بدون حذف أي نقطة) ━━━'
+      : isArabic
+      ? '━━━ الاستعراض الكامل والتفصيلي لكافة صفحات وشرائح هذا الموضوع (دون اختصار) ━━━'
+      : '━━━ Complete Page-by-Page Verbatim Slide Breakdown (Zero Omissions) ━━━';
+
+    data.detailedExplanation = existingDetailed
+      ? `${existingDetailed}\n\n${sectionDivider}\n\n${pageBreakdowns.join('\n\n')}`
+      : pageBreakdowns.join('\n\n');
+  }
+
+  // 3. Ensure 100% of verbatim slide points are included in sourceGroundedPoints (no 4-item slicing!)
+  const allVerbatimPoints = [];
+  for (const b of blocks) {
+    const pagePrefix = isArabic ? `(صفحة ${b.page})` : `(Page ${b.page})`;
+    if (b.type === 'definition') {
+      allVerbatimPoints.push(`${pagePrefix} ${b.term || b.title}: ${b.content}`);
+    } else if (b.type === 'bullet' && Array.isArray(b.points) && b.points.length) {
+      for (const pt of b.points) {
+        allVerbatimPoints.push(`${pagePrefix} ${pt}`);
+      }
+    } else if (b.type === 'paragraph' && b.content) {
+      allVerbatimPoints.push(`${pagePrefix} ${b.content}`);
+    } else if (b.type === 'table' && b.tableData?.rows) {
+      for (const row of b.tableData.rows) {
+        allVerbatimPoints.push(`${pagePrefix} [Table]: ${row.join(' — ')}`);
+      }
+    }
+  }
+
+  const aiGrounded = Array.isArray(data.sourceGroundedPoints) ? data.sourceGroundedPoints : [];
+  const combinedGrounded = [...aiGrounded];
+  for (const vp of allVerbatimPoints) {
+    if (!combinedGrounded.some((existing) => existing.includes(vp.slice(0, 35)))) {
+      combinedGrounded.push(vp);
+    }
+  }
+  data.sourceGroundedPoints = combinedGrounded;
+
+  // 4. Ensure stepByStepProcesses has at least 4 rich steps if bullets/processes exist
+  if (!Array.isArray(data.stepByStepProcesses) || data.stepByStepProcesses.length < 3) {
+    const stepCandidates = allVerbatimPoints.slice(0, 6);
+    if (stepCandidates.length > (data.stepByStepProcesses?.length || 0)) {
+      data.stepByStepProcesses = stepCandidates.map((pt, idx) => {
+        const cleanPt = pt.replace(/^\((?:صفحة|Page)\s*\d+\)\s*/, '');
+        const colonPos = cleanPt.indexOf(':');
+        const actionTitle =
+          colonPos > 2 && colonPos < 45
+            ? cleanPt.slice(0, colonPos).trim()
+            : isArabic
+            ? `الخطوة والركيزة رقم ${idx + 1}`
+            : `Step & Core Mechanism ${idx + 1}`;
+        return {
+          step: idx + 1,
+          action: actionTitle,
+          explanation: cleanPt,
+        };
+      });
+    }
+  }
+
+  return data;
 }
 
 function buildDeterministicTopicExplanation(topic, blocks, language) {

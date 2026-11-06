@@ -251,7 +251,9 @@ export const ExplanationsView: React.FC<ExplanationsViewProps> = ({
               </div>
               <div className="section-body-text">
                 {activeTopic.sections?.detailedExplanation?.split('\n\n').map((paragraph, pIdx) => (
-                  <p key={pIdx}>{paragraph}</p>
+                  <p key={pIdx} style={{ whiteSpace: 'pre-line', lineHeight: 1.85 }}>
+                    {paragraph}
+                  </p>
                 ))}
               </div>
             </div>
