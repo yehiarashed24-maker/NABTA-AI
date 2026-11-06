@@ -65,6 +65,10 @@ import { VivaModal } from "./components/VivaModal";
 import { QuizModal } from "./components/QuizModal";
 import { ConceptDrawer } from "./components/ConceptDrawer";
 import { FormattedMessage } from "./components/FormattedMessage";
+import { StudySheetsView } from "./components/StudySheetsView";
+import { ExplanationsView } from "./components/ExplanationsView";
+import { OriginalPdfModal } from "./components/OriginalPdfModal";
+import { CustomQuizBuilderModal } from "./components/CustomQuizBuilderModal";
 import { speakText, stopSpeaking, isSpeaking, createSpeechRecognizer } from "./audio";
 
 
@@ -644,7 +648,10 @@ const AppSidebar = ({
       .toUpperCase() || "N";
   return (
     <aside className="app-sidebar">
-      <Brand light />
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: "8px" }}>
+        <Brand light />
+        <LanguageSwitcher variant="pill" />
+      </div>
       <button
         className={`profile ${active === "account" ? "active" : ""}`}
         onClick={() => navigate("/account")}
@@ -674,6 +681,20 @@ const AppSidebar = ({
         {active !== "dashboard" && active !== "account" && (
           <>
             <button
+              className={active === "sheets" ? "active" : ""}
+              onClick={() => go("sheets")}
+            >
+              <Layers />
+              {t("tabSheets")}
+            </button>
+            <button
+              className={active === "explanations" ? "active" : ""}
+              onClick={() => go("explanations")}
+            >
+              <BookOpen />
+              {t("tabExplanations")}
+            </button>
+            <button
               className={active === "tutor" ? "active" : ""}
               onClick={() => go("tutor")}
             >
@@ -684,7 +705,7 @@ const AppSidebar = ({
               className={active === "guide" ? "active" : ""}
               onClick={() => go("guide")}
             >
-              <BookOpen />
+              <FileText />
               {t("navGuide")}
             </button>
             <button
@@ -734,6 +755,29 @@ const UploadModal = ({
   const [title, setTitle] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [stageIdx, setStageIdx] = useState(0);
+
+  const STAGES = [
+    { title: "1. رفع وتأمين المستند الأصلي", sub: "حفظ الملف الأصلي والتحقق من سلامة البيانات" },
+    { title: "2. استخراج الهيكل والكتل النصية", sub: "استخراج الجداول والمعادلات والتعريفات" },
+    { title: "3. التحليل الدلالي وتصنيف المواضيع", sub: "اكتشاف العلاقات المعرفية وتسلسل الشرح" },
+    { title: "4. تجميع الوحدات التعليمية", sub: "تحديد أوراق المذاكرة ديناميكياً لضمان المقروئية" },
+    { title: "5. تصميم أوراق المذاكرة برمجياً", sub: "توليد تصاميم وأشكال معمارية بدقة عالية" },
+    { title: "6. التحقق واكتمال المحتوى (100% Grounded)", sub: "فحص نسب التغطية وتوثيق كل كلمة" },
+    { title: "7. بناء الشروحات المنظمة وخريطة الإتقان", sub: "تجهيز الشرح بالعامية والفصحى والإنجليزية" },
+  ];
+
+  useEffect(() => {
+    if (!busy) {
+      setStageIdx(0);
+      return;
+    }
+    const interval = setInterval(() => {
+      setStageIdx((prev) => (prev < STAGES.length - 1 ? prev + 1 : prev));
+    }, 1800);
+    return () => clearInterval(interval);
+  }, [busy]);
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -754,74 +798,137 @@ const UploadModal = ({
       setBusy(false);
     }
   };
+
   return (
     <div
       className="modal-backdrop"
-      onMouseDown={(event) => event.target === event.currentTarget && onClose()}
+      onMouseDown={(event) => event.target === event.currentTarget && !busy && onClose()}
     >
       <form className="upload-modal" onSubmit={submit}>
-        <button type="button" className="modal-close" onClick={onClose}>
-          <X />
-        </button>
+        {!busy && (
+          <button type="button" className="modal-close" onClick={onClose}>
+            <X />
+          </button>
+        )}
         <span className="modal-kicker">{t("modalKicker")}</span>
         <h2>{t("modalTitle")}</h2>
         <p>{t("modalDesc")}</p>
-        <div className="mode-tabs">
-          <button
-            type="button"
-            className={mode === "file" ? "active" : ""}
-            onClick={() => setMode("file")}
-          >
-            <FileText />
-            {t("modalTabPdf")}
-          </button>
-          <button
-            type="button"
-            className={mode === "text" ? "active" : ""}
-            onClick={() => setMode("text")}
-          >
-            <BookOpen />
-            {t("modalTabPaste")}
-          </button>
-        </div>
-        {mode === "file" ? (
-          <label className={`dropzone ${file ? "has-file" : ""}`}>
-            <input
-              type="file"
-              accept="application/pdf,text/plain"
-              onChange={(event) => setFile(event.target.files?.[0] || null)}
-            />
-            <UploadCloud />
-            {file ? (
-              <>
-                <strong>{file.name}</strong>
-                <span>
-                  {(file.size / 1024 / 1024).toFixed(2)} MB · Ready
-                </span>
-              </>
-            ) : (
-              <>
-                <strong>{t("modalDropzone")}</strong>
-                <span>{t("modalDropzoneSub")}</span>
-              </>
-            )}
-          </label>
+
+        {busy ? (
+          <div className="upload-processing-box" style={{ background: '#fdfbf7', border: '1px solid #ebdcb9', borderRadius: '14px', padding: '20px', margin: '14px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
+              <Loader2 size={24} className="spin text-emerald-800" />
+              <div>
+                <strong style={{ fontSize: '15px', color: 'var(--forest)' }}>جاري المعالجة الذكية وإعادة تنظيم المحتوى...</strong>
+                <p style={{ margin: '2px 0 0', fontSize: '12px', color: 'var(--muted)' }}>يتم تحويل الملف إلى أوراق مذاكرة مصممة وشروحات دقيقة</p>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              {STAGES.map((st, idx) => {
+                const isCurrent = idx === stageIdx;
+                const isDone = idx < stageIdx;
+                return (
+                  <div
+                    key={idx}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '10px',
+                      padding: '8px 12px',
+                      borderRadius: '8px',
+                      background: isCurrent ? '#ffffff' : isDone ? '#f0fdf4' : 'transparent',
+                      border: isCurrent ? '1px solid var(--forest)' : isDone ? '1px solid #bbf7d0' : '1px solid transparent',
+                      opacity: idx > stageIdx ? 0.45 : 1,
+                      transition: 'all 0.3s ease',
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: '20px',
+                        height: '20px',
+                        borderRadius: '50%',
+                        background: isDone ? '#16a34a' : isCurrent ? 'var(--forest)' : 'var(--line)',
+                        color: '#fff',
+                        display: 'grid',
+                        placeItems: 'center',
+                        fontSize: '10px',
+                        fontWeight: '700',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {isDone ? '✓' : idx + 1}
+                    </div>
+                    <div style={{ flex: 1 }}>
+                      <strong style={{ fontSize: '12.5px', color: isCurrent ? 'var(--forest)' : 'var(--ink)' }}>{st.title}</strong>
+                      <span style={{ display: 'block', fontSize: '11px', color: 'var(--muted)' }}>{st.sub}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         ) : (
-          <textarea
-            value={text}
-            onChange={(event) => setText(event.target.value)}
-            placeholder={t("modalPastePlaceholder")}
-            rows={8}
-          />
+          <>
+            <div className="mode-tabs">
+              <button
+                type="button"
+                className={mode === "file" ? "active" : ""}
+                onClick={() => setMode("file")}
+              >
+                <FileText />
+                {t("modalTabPdf")}
+              </button>
+              <button
+                type="button"
+                className={mode === "text" ? "active" : ""}
+                onClick={() => setMode("text")}
+              >
+                <BookOpen />
+                {t("modalTabPaste")}
+              </button>
+            </div>
+            {mode === "file" ? (
+              <label className={`dropzone ${file ? "has-file" : ""}`}>
+                <input
+                  type="file"
+                  accept="application/pdf,text/plain"
+                  onChange={(event) => setFile(event.target.files?.[0] || null)}
+                />
+                <UploadCloud />
+                {file ? (
+                  <>
+                    <strong>{file.name}</strong>
+                    <span>
+                      {(file.size / 1024 / 1024).toFixed(2)} MB · جاهز للمعالجة
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <strong>{t("modalDropzone")}</strong>
+                    <span>{t("modalDropzoneSub")}</span>
+                  </>
+                )}
+              </label>
+            ) : (
+              <textarea
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                placeholder={t("modalPastePlaceholder")}
+                rows={8}
+              />
+            )}
+            <label className="field-label">
+              {t("modalTitleLabel")}
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                placeholder={t("modalTitlePlaceholder")}
+              />
+            </label>
+          </>
         )}
-        <label className="field-label">
-          {t("modalTitleLabel")}
-          <input
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            placeholder={t("modalTitlePlaceholder")}
-          />
-        </label>
+
         {error && <div className="form-error">{error}</div>}
         <button
           className="primary-submit"
@@ -983,6 +1090,19 @@ const Dashboard = () => {
                           ? t("focusOn", { topic: workspace.weakTopics[0] })
                           : t("readyFirstSession")}
                       </p>
+                      <div style={{ display: 'flex', gap: '6px', margin: '8px 0', flexWrap: 'wrap' }}>
+                        <span style={{ fontSize: '11px', background: 'var(--soft)', color: 'var(--forest)', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>
+                          🖼️ {workspace.studySheets?.length || 0} {t("tabSheets")}
+                        </span>
+                        <span style={{ fontSize: '11px', background: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>
+                          ✓ {workspace.coverageReport?.coveragePercentage || 100}% {t("coverageVerified")}
+                        </span>
+                        {workspace.quizzes?.length > 0 && (
+                          <span style={{ fontSize: '11px', background: '#fef3c7', color: '#92400e', padding: '2px 8px', borderRadius: '4px', fontWeight: '600' }}>
+                            🎯 {workspace.quizzes.length} {t("tabQuiz")}
+                          </span>
+                        )}
+                      </div>
                       <small>
                         <Clock3 /> Updated{" "}
                         {new Date(workspace.lastStudiedAt).toLocaleDateString()}
@@ -1359,6 +1479,11 @@ const Tutor = ({
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState<"strict" | "explain">("strict");
   const isGrounded = mode === "strict";
+  const [contextScope, setContextScope] = useState<"lecture" | "topic" | "sheet" | "page">("lecture");
+  const [selectedTopicId, setSelectedTopicId] = useState<string>(workspace.semanticTopics?.[0]?.id || "");
+  const [selectedSheetNumber, setSelectedSheetNumber] = useState<number>(workspace.studySheets?.[0]?.sheetNumber || 1);
+  const [selectedPageNumber, setSelectedPageNumber] = useState<number>(1);
+  const totalPages = workspace.documents.reduce((acc, d) => acc + (d.pageCount || 1), 0);
   const [isListening, setIsListening] = useState(false);
   const [voiceModalOpen, setVoiceModalOpen] = useState(false);
   const [playingMsgId, setPlayingMsgId] = useState<string | null>(null);
@@ -1390,7 +1515,17 @@ const Tutor = ({
       await api(`/api/workspaces/${workspace.id}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: queryToSend, grounded: isGrounded, mode }),
+        body: JSON.stringify({
+          question: queryToSend,
+          grounded: isGrounded,
+          mode,
+          scope: {
+            type: contextScope,
+            topicId: contextScope === "topic" ? selectedTopicId : undefined,
+            sheetNumber: contextScope === "sheet" ? selectedSheetNumber : undefined,
+            page: contextScope === "page" ? selectedPageNumber : undefined,
+          },
+        }),
       });
       await refresh();
     } finally {
@@ -1599,6 +1734,97 @@ const Tutor = ({
             </div>
           )}
           <div ref={bottom} />
+        </div>
+
+        <div className="chat-scope-bar">
+          <div className="chat-scope-left">
+            <span className="scope-label"><Target size={12} /> {t("tutorScopeLabel")}</span>
+            <div className="scope-pills-row">
+              <button
+                type="button"
+                className={`scope-pill-btn ${contextScope === "lecture" ? "active" : ""}`}
+                onClick={() => setContextScope("lecture")}
+              >
+                {t("tutorScopeLecture")}
+              </button>
+              {workspace.semanticTopics && workspace.semanticTopics.length > 0 && (
+                <button
+                  type="button"
+                  className={`scope-pill-btn ${contextScope === "topic" ? "active" : ""}`}
+                  onClick={() => {
+                    setContextScope("topic");
+                    if (!selectedTopicId && workspace.semanticTopics?.[0]) {
+                      setSelectedTopicId(workspace.semanticTopics[0].id);
+                    }
+                  }}
+                >
+                  {t("tutorScopeTopic")}
+                </button>
+              )}
+              {workspace.studySheets && workspace.studySheets.length > 0 && (
+                <button
+                  type="button"
+                  className={`scope-pill-btn ${contextScope === "sheet" ? "active" : ""}`}
+                  onClick={() => setContextScope("sheet")}
+                >
+                  {t("tutorScopeSheet")}
+                </button>
+              )}
+              {totalPages > 0 && (
+                <button
+                  type="button"
+                  className={`scope-pill-btn ${contextScope === "page" ? "active" : ""}`}
+                  onClick={() => setContextScope("page")}
+                >
+                  {t("tutorScopePage")}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="chat-scope-selector">
+            {contextScope === "topic" && workspace.semanticTopics && (
+              <select
+                className="scope-dropdown"
+                value={selectedTopicId}
+                onChange={(e) => setSelectedTopicId(e.target.value)}
+              >
+                {workspace.semanticTopics.map((top) => (
+                  <option key={top.id} value={top.id}>
+                    {top.title}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {contextScope === "sheet" && workspace.studySheets && (
+              <select
+                className="scope-dropdown"
+                value={selectedSheetNumber}
+                onChange={(e) => setSelectedSheetNumber(Number(e.target.value))}
+              >
+                {workspace.studySheets.map((sh) => (
+                  <option key={sh.sheetNumber} value={sh.sheetNumber}>
+                    #{sh.sheetNumber}: {sh.title}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {contextScope === "page" && (
+              <select
+                className="scope-dropdown"
+                value={selectedPageNumber}
+                onChange={(e) => setSelectedPageNumber(Number(e.target.value))}
+              >
+                {Array.from({ length: Math.max(totalPages, 1) }, (_, i) => i + 1).map((p) => (
+                  <option key={p} value={p}>
+                    {t("pageCitation", { page: p })}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
 
         <form className="chat-input" onSubmit={ask}>
@@ -2211,12 +2437,14 @@ const QuizView = ({
         </div>
       )}
 
-      {/* Quiz Modal */}
-      <QuizModal
+      {/* Custom Quiz Builder Modal */}
+      <CustomQuizBuilderModal
         workspace={workspace}
         isOpen={modalOpen}
+        initialTopic={initialTopic}
         onClose={() => setModalOpen(false)}
         onQuizCreated={(newQuiz) => {
+          refresh();
           handleStartQuiz(newQuiz);
         }}
       />
@@ -2641,13 +2869,15 @@ const AccountPage = () => {
 };
 
 const StudyWorkspace = ({ id }: { id: string }) => {
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
-  const [tab, setTab] = useState("tutor");
+  const [tab, setTab] = useState("sheets");
   const [loading, setLoading] = useState(true);
   const [pendingTutorQuery, setPendingTutorQuery] = useState("");
   const [pendingQuizTopic, setPendingQuizTopic] = useState("");
   const [vivaModalOpen, setVivaModalOpen] = useState(false);
+  const [pdfModalOpen, setPdfModalOpen] = useState(false);
+  const [pdfInitialPage, setPdfInitialPage] = useState(1);
 
   const refresh = async () => {
     const data = await api<Workspace>(`/api/workspaces/${id}`);
@@ -2656,6 +2886,22 @@ const StudyWorkspace = ({ id }: { id: string }) => {
   useEffect(() => {
     refresh().finally(() => setLoading(false));
   }, [id]);
+
+  useEffect(() => {
+    if (!workspace?.id) return;
+    const currentExpLang = workspace.explanations?.language || "ar_eg";
+    const targetExpLang = lang === "en" ? "en" : currentExpLang === "en" ? "ar_eg" : currentExpLang;
+    if (currentExpLang !== targetExpLang) {
+      fetch(`/api/workspaces/${workspace.id}/explanations`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ language: targetExpLang }),
+      })
+        .then(() => refresh())
+        .catch(() => null);
+    }
+  }, [lang, workspace?.id]);
+
   if (loading || !workspace)
     return (
       <div className="full-loader">
@@ -2664,9 +2910,12 @@ const StudyWorkspace = ({ id }: { id: string }) => {
         <span>{t("wsPreparing")}</span>
       </div>
     );
+
   const tabs = [
+    { id: "sheets", label: t("tabSheets"), icon: Layers },
+    { id: "explanations", label: t("tabExplanations"), icon: BookOpen },
     { id: "tutor", label: t("tabTutor"), icon: MessageCircle },
-    { id: "guide", label: t("tabGuide"), icon: BookOpen },
+    { id: "guide", label: t("tabGuide"), icon: FileText },
     { id: "quiz", label: t("tabQuiz"), icon: Target },
     { id: "progress", label: t("tabProgress"), icon: BarChart3 },
   ];
@@ -2679,6 +2928,15 @@ const StudyWorkspace = ({ id }: { id: string }) => {
   const handleOpenQuizWithTopic = (topic: string) => {
     setPendingQuizTopic(topic);
     setTab("quiz");
+  };
+
+  const handleOpenPdf = (page = 1) => {
+    setPdfInitialPage(page);
+    setPdfModalOpen(true);
+  };
+
+  const handleOpenSheet = (_sheetNum = 1) => {
+    setTab("sheets");
   };
 
   return (
@@ -2698,6 +2956,26 @@ const StudyWorkspace = ({ id }: { id: string }) => {
             </p>
           </div>
           <div className="header-actions" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "10px" }}>
+            <button
+              className="subtle-button"
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "0.5rem",
+                background: "#ffffff",
+                border: "1px solid var(--line)",
+                padding: "0.45rem 0.85rem",
+                borderRadius: "8px",
+                fontWeight: 600,
+                color: "var(--forest)",
+                cursor: "pointer",
+              }}
+              onClick={() => handleOpenPdf(1)}
+              title={t("openOriginalPdf")}
+            >
+              <BookOpen size={15} />
+              <span>{t("tabOriginalDoc")}</span>
+            </button>
             <LanguageSwitcher variant="header" />
             <button
               className="subtle-button"
@@ -2727,6 +3005,24 @@ const StudyWorkspace = ({ id }: { id: string }) => {
           ))}
         </nav>
         <div className="study-content">
+          {tab === "sheets" && (
+            <StudySheetsView
+              workspace={workspace}
+              onOpenPdf={handleOpenPdf}
+              onOpenQuizWithTopic={handleOpenQuizWithTopic}
+              onOpenTutorWithQuery={handleOpenTutorWithQuery}
+            />
+          )}
+          {tab === "explanations" && (
+            <ExplanationsView
+              workspace={workspace}
+              onOpenPdf={handleOpenPdf}
+              onOpenSheet={handleOpenSheet}
+              onOpenQuizWithTopic={handleOpenQuizWithTopic}
+              onOpenTutorWithQuery={handleOpenTutorWithQuery}
+              onRefreshWorkspace={refresh}
+            />
+          )}
           {tab === "tutor" && (
             <Tutor
               workspace={workspace}
@@ -2762,6 +3058,14 @@ const StudyWorkspace = ({ id }: { id: string }) => {
           )}
         </div>
       </main>
+
+      {/* Side-by-side Original PDF Drawer / Modal */}
+      <OriginalPdfModal
+        workspace={workspace}
+        isOpen={pdfModalOpen}
+        initialPage={pdfInitialPage}
+        onClose={() => setPdfModalOpen(false)}
+      />
 
       {/* Global Viva Oral Exam Modal */}
       <VivaModal

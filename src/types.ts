@@ -165,6 +165,130 @@ export type VivaAttempt = {
   createdAt: string;
 };
 
+export type ContentBlockType =
+  | 'heading'
+  | 'subheading'
+  | 'paragraph'
+  | 'bullet'
+  | 'table'
+  | 'code'
+  | 'equation'
+  | 'definition'
+  | 'diagram';
+
+export type ContentBlock = {
+  id: string;
+  page: number;
+  type: ContentBlockType;
+  title?: string;
+  content: string;
+  items?: string[];
+  tableData?: { headers: string[]; rows: string[][] };
+  isKeyTerm?: boolean;
+  term?: string;
+  uncertain?: boolean;
+  metadata?: Record<string, any>;
+};
+
+export type SemanticTopic = {
+  id: string;
+  title: string;
+  description: string;
+  sourcePages: number[];
+  subtopics: string[];
+  keyTerms: string[];
+  prerequisites: string[];
+  order: number;
+  blockIds: string[];
+  allocatedSheets?: number;
+};
+
+export type StudySheetTheme = {
+  name: string;
+  bg: string;
+  cardBg: string;
+  primary: string;
+  primaryText: string;
+  accent: string;
+  accentLight: string;
+  border: string;
+  textMain: string;
+  textMuted: string;
+  tagBg: string;
+  tagText: string;
+};
+
+export type StudySheetCard = {
+  id: string;
+  type: 'concept' | 'definition' | 'table' | 'formula' | 'code' | 'process' | 'warning';
+  title: string;
+  badge?: string;
+  content?: string;
+  points?: string[];
+  items?: any[];
+  tableData?: { headers: string[]; rows: string[][] };
+  sourcePages: number[];
+  blockIds: string[];
+};
+
+export type StudySheet = {
+  id: string;
+  sheetNumber: number;
+  totalSheets: number;
+  topicId: string;
+  topicTitle: string;
+  title: string;
+  subtitle: string;
+  theme: StudySheetTheme;
+  cards: StudySheetCard[];
+  diagramType: 'layers' | 'flowchart' | 'comparison' | 'mindmap';
+  sourcePages: number[];
+  blockIds: string[];
+  coverageScore: number;
+  svgImage?: string;
+};
+
+export type PageCoverageStat = {
+  page: number;
+  totalBlocks: number;
+  mappedBlocks: number;
+  coverage: number;
+};
+
+export type CoverageReport = {
+  totalBlocks: number;
+  mappedBlocks: number;
+  coveragePercentage: number;
+  flaggedUncertainBlocks: number;
+  sourcePageCoverage: PageCoverageStat[];
+  notes: string[];
+};
+
+export type TopicExplanation = {
+  topicId: string;
+  topicTitle: string;
+  overview: string;
+  sourcePages: number[];
+  linkedSheetNumbers: number[];
+  sections: {
+    detailedExplanation: string;
+    simplifiedAnalogy?: string;
+    definitions: { term: string; meaning: string; sourcePages?: number[] }[];
+    stepByStepProcesses?: { step: number; action: string; explanation: string }[];
+    practicalExamples?: string[];
+    conceptComparisons?: { conceptA: string; conceptB: string; difference: string }[];
+    diagramOrTableExplanation?: string;
+    keyTakeaways: string[];
+    sourceGroundedPoints: string[];
+    supplementaryAiPoints: string[];
+  };
+};
+
+export type ExplanationsData = {
+  language: 'ar_eg' | 'ar_msa' | 'en';
+  topics: TopicExplanation[];
+};
+
 export type Workspace = {
   id: string;
   title: string;
@@ -183,6 +307,12 @@ export type Workspace = {
   masteryEvidence?: MasteryEvidence[];
   nextBestAction?: NextBestAction | null;
   vivaAttempts?: VivaAttempt[];
+  studySheets?: StudySheet[];
+  coverageReport?: CoverageReport | null;
+  semanticTopics?: SemanticTopic[];
+  explanations?: ExplanationsData | null;
+  extractedBlocks?: ContentBlock[];
+  processingStage?: { stage: string; progress: number; label: string };
 };
 
 export type AuthUser = {
@@ -204,3 +334,4 @@ export type Account = {
   dailyGoal: number;
   joinedAt: string;
 };
+
