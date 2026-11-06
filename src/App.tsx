@@ -69,7 +69,7 @@ import { StudySheetsView } from "./components/StudySheetsView";
 import { ExplanationsView } from "./components/ExplanationsView";
 import { OriginalPdfModal } from "./components/OriginalPdfModal";
 import { CustomQuizBuilderModal } from "./components/CustomQuizBuilderModal";
-import { speakText, stopSpeaking, isSpeaking, createSpeechRecognizer } from "./audio";
+import { speakText, stopSpeaking, isSpeaking, createSpeechRecognizer, unlockAudio } from "./audio";
 
 
 const api = async <T,>(url: string, options?: RequestInit): Promise<T> => {
@@ -652,24 +652,6 @@ const AppSidebar = ({
         <Brand light />
         <LanguageSwitcher variant="pill" />
       </div>
-      <button
-        className={`profile ${active === "account" ? "active" : ""}`}
-        onClick={() => navigate("/account")}
-        title="Open Nabta account"
-      >
-        <div>
-          {user?.picture ? (
-            <img src={user.picture} alt="" referrerPolicy="no-referrer" />
-          ) : (
-            initials
-          )}
-        </div>
-        <span>
-          <strong>{name}</strong>
-          <small>{user?.isGuest ? t("localGuest") : user?.email}</small>
-        </span>
-        <ChevronRight />
-      </button>
       <div className="app-nav">
         <button
           className={active === "dashboard" ? "active" : ""}
@@ -737,6 +719,24 @@ const AppSidebar = ({
           </button>
         )}
       </div>
+      <button
+        className={`profile ${active === "account" ? "active" : ""}`}
+        onClick={() => navigate("/account")}
+        title="Open Nabta account"
+      >
+        <div>
+          {user?.picture ? (
+            <img src={user.picture} alt="" referrerPolicy="no-referrer" />
+          ) : (
+            initials
+          )}
+        </div>
+        <span>
+          <strong>{name}</strong>
+          <small>{user?.isGuest ? t("localGuest") : user?.email}</small>
+        </span>
+        <ChevronRight />
+      </button>
     </aside>
   );
 };
@@ -1534,6 +1534,7 @@ const Tutor = ({
   };
 
   const handleSpeechInput = () => {
+    unlockAudio();
     if (isListening) {
       recognizerRef.current?.stop();
       setIsListening(false);
@@ -1542,8 +1543,9 @@ const Tutor = ({
         onStart: () => setIsListening(true),
         onResult: (text, isFinal) => {
           setQuestion(text);
-          if (isFinal) {
+          if (isFinal && text.trim()) {
             setIsListening(false);
+            ask(undefined, text.trim());
           }
         },
         onError: () => setIsListening(false),
@@ -1557,6 +1559,7 @@ const Tutor = ({
   };
 
   const toggleSpeakMessage = (msgId: string, content: string) => {
+    unlockAudio();
     if (playingMsgId === msgId) {
       stopSpeaking();
       setPlayingMsgId(null);
@@ -1564,7 +1567,7 @@ const Tutor = ({
       stopSpeaking();
       setPlayingMsgId(msgId);
       speakText(content, lang, {
-        rate: 0.95,
+        rate: 1.0,
         onEnd: () => setPlayingMsgId(null),
       });
     }
@@ -2981,7 +2984,7 @@ const StudyWorkspace = ({ id }: { id: string }) => {
               {t("pagesCount", { count: workspace.documents[0]?.pageCount || 1 })}
             </p>
           </div>
-          <div className="header-actions" style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: "10px" }}>
+          <div className="header-actions" style={{ marginInlineStart: "auto", display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap" }}>
             <button
               className="subtle-button"
               style={{

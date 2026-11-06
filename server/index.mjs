@@ -483,9 +483,69 @@ export function detectPageNumber(query) {
   return parseArabicWordsToNumber(norm);
 }
 
+const BILINGUAL_ACADEMIC_GLOSSARY = [
+  [['رخص', 'رخصة', 'ترخيص', 'تراخيص', 'مفتوح المصدر', 'البرمجيات الحرة'], ['license', 'licenses', 'licensing', 'open source', 'free software', 'permissive', 'copyleft', 'mit', 'apache', 'gpl', 'bsd']],
+  [['متساهلة', 'متساهل', 'سمحة'], ['permissive', 'mit', 'apache', 'bsd']],
+  [['حقوق متروكة', 'كوبي ليفت', 'عدوى الترخيص'], ['copyleft', 'gpl', 'agpl', 'lgpl', 'reciprocal', 'derivative']],
+  [['توافق', 'امتثال', 'التزام', 'دمج'], ['compliance', 'compatibility', 'compatible', 'obligations', 'attribution', 'notice']],
+  [['مجتمع', 'حوكمة', 'مساهمة', 'مساهمين', 'إدارة المشروع', 'قواعد السلوك', 'ملف التعريف'], ['community', 'governance', 'contributing', 'contributor', 'contributors', 'conduct', 'readme', 'maintainer', 'maintainers', 'health']],
+  [['أمن', 'حماية', 'أمان', 'سيبراني', 'تشفير', 'سرية', 'سلامة', 'توافر', 'تهديد', 'هجوم', 'وصول', 'مصادقة', 'صلاحيات'], ['security', 'cybersecurity', 'encryption', 'cryptography', 'confidentiality', 'integrity', 'availability', 'threat', 'attack', 'access', 'control', 'authentication', 'authorization']],
+  [['شبكة', 'شبكات', 'بروتوكول', 'طبقات', 'حزمة', 'توجيه'], ['network', 'networking', 'protocol', 'layer', 'layers', 'osi', 'tcp', 'udp', 'ip', 'packet', 'routing']],
+  [['خوارزمية', 'بيانات', 'هيكل', 'شجرة', 'مصفوفة', 'ترتيب', 'بحث', 'تعقيد'], ['algorithm', 'data', 'structure', 'tree', 'array', 'graph', 'sort', 'search', 'complexity']],
+  [['قاعدة بيانات', 'قواعد البيانات', 'جدول', 'استعلام', 'علاقات'], ['database', 'sql', 'table', 'query', 'relational', 'schema', 'index', 'transaction']],
+  [['نظام تشغيل', 'عملية', 'ذاكرة', 'جدولة', 'خيط'], ['operating', 'system', 'process', 'thread', 'memory', 'scheduling', 'kernel', 'deadlock']],
+  [['ذكاء اصطناعي', 'تعلم آلي', 'شبكة عصبية', 'نموذج', 'تدريب'], ['artificial', 'intelligence', 'machine', 'learning', 'neural', 'model', 'training', 'deep']],
+  [['برمجة', 'كود', 'دالة', 'كائن', 'فئة', 'متغير', 'واجهة'], ['programming', 'code', 'function', 'object', 'class', 'variable', 'interface', 'api', 'method']],
+  [['اختبار', 'تقييم', 'مختبر', 'عملي', 'مشروع', 'تحضير'], ['assessment', 'synthesis', 'lab', 'hands-on', 'project', 'preparation', 'evaluation', 'quiz']],
+  [['أهداف', 'مقدمة', 'مبادئ', 'أساسيات', 'مفهوم', 'تعريف', 'مقارنة', 'جدول', 'خطوات'], ['objectives', 'learning', 'introduction', 'principles', 'fundamentals', 'concept', 'definition', 'comparison', 'table', 'steps', 'workflow']],
+];
+
+const QUERY_STOPWORDS = new Set([
+  'اشرح', 'شرح', 'اشرحلي', 'اشرحلى', 'وضح', 'فهمني', 'فهمنى', 'قولي', 'قولى', 'عايز', 'عاوز',
+  'ممكن', 'لي', 'لى', 'عن', 'في', 'فى', 'من', 'على', 'إلى', 'الى', 'هو', 'هي', 'ما', 'ماذا',
+  'كيف', 'ازاي', 'إزاي', 'هل', 'هذا', 'هذه', 'ذلك', 'تلك', 'اللي', 'الذي', 'التي', 'بالتفصيل',
+  'تفصيلي', 'كامل', 'كاملة', 'كله', 'كلها', 'ده', 'دي', 'دا', 'ايه', 'إيه', 'يعني', 'بسرعة',
+  'موضوع', 'الموضوع', 'ورقة', 'الورقة', 'مذاكرة', 'رقم', 'صفحة', 'الصفحة',
+  'what', 'is', 'are', 'the', 'of', 'in', 'to', 'for', 'and', 'or', 'on', 'about', 'explain',
+  'detail', 'details', 'detailed', 'please', 'can', 'you', 'tell', 'me', 'how', 'why', 'this', 'that',
+  'topic', 'study', 'sheet',
+]);
+
+function extractQueryTermsWithExpansion(query = '') {
+  const norm = String(query || '')
+    .toLowerCase()
+    .replace(/[أإآ]/g, 'ا')
+    .replace(/ة/g, 'ه')
+    .replace(/ى/g, 'ي');
+
+  const rawTokens = norm
+    .replace(/[^\p{L}\p{N}\s\-]/gu, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length >= 2 && !QUERY_STOPWORDS.has(t));
+
+  const expanded = new Set(rawTokens);
+
+  for (const [arList, enList] of BILINGUAL_ACADEMIC_GLOSSARY) {
+    const normArList = arList.map((w) => w.replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/ى/g, 'ي'));
+    const hasAr = normArList.some((w) => norm.includes(w) || rawTokens.some((tok) => tok.includes(w) || w.includes(tok)));
+    const hasEn = enList.some((w) => norm.includes(w) || rawTokens.includes(w));
+    if (hasAr || hasEn) {
+      for (const enWord of enList) expanded.add(enWord.toLowerCase());
+      for (const arWord of normArList) expanded.add(arWord);
+    }
+  }
+
+  return { rawTokens, expandedTerms: [...expanded] };
+}
+
 export async function retrieve(storeOrChunks, workspaceIdOrQuery, queryOrTopK, topK = config.topK) {
   let chunks = [];
   let query = '';
+  let effectiveTopK = typeof topK === 'number' ? topK : config.topK;
+  if (typeof topK === 'object' && topK !== null && typeof topK.limit === 'number') {
+    effectiveTopK = topK.limit;
+  }
+
   if (Array.isArray(storeOrChunks)) {
     chunks = storeOrChunks;
     query = workspaceIdOrQuery;
@@ -495,7 +555,12 @@ export async function retrieve(storeOrChunks, workspaceIdOrQuery, queryOrTopK, t
     chunks = (storeOrChunks.chunks || []).filter((chunk) => chunk.workspaceId === workspaceId);
   }
 
-  const targetPage = detectPageNumber(query);
+  if (!chunks.length) return [];
+
+  // 1. Check if query explicitly asks for a specific page/slide number (but NOT "base 10" or "ورقة رقم X")
+  const isSheetRef = /(?:ورقة|ورقه|الورقة|الورقه|study\s*sheet|sheet\s*#)\s*(?:رقم\s*)?\d+/i.test(query);
+  const isBaseNumber = /\bbase\s*\d+\b/i.test(query);
+  const targetPage = (!isSheetRef && !isBaseNumber) ? detectPageNumber(query) : null;
   if (targetPage !== null) {
     const pageChunks = chunks.filter((chunk) => chunk.page === targetPage);
     if (pageChunks.length > 0) {
@@ -505,31 +570,53 @@ export async function retrieve(storeOrChunks, workspaceIdOrQuery, queryOrTopK, t
 
   const queryEmbedding = await embed(query, 'RETRIEVAL_QUERY');
   const localQueryEmbedding = localEmbedding(query);
+  const { rawTokens, expandedTerms } = extractQueryTermsWithExpansion(query);
 
   const semanticMatches = chunks
     .map((chunk) => {
-      let score = 0;
+      let vectorScore = 0;
       if (chunk.embedding && chunk.embedding.length === queryEmbedding.values.length) {
-        score = cosine(queryEmbedding.values, chunk.embedding);
+        vectorScore = cosine(queryEmbedding.values, chunk.embedding);
       } else if (chunk.embedding && chunk.embedding.length === localQueryEmbedding.length) {
-        score = cosine(localQueryEmbedding, chunk.embedding);
+        vectorScore = cosine(localQueryEmbedding, chunk.embedding);
       } else {
-        score = cosine(localQueryEmbedding, localEmbedding(chunk.text || ''));
+        vectorScore = cosine(localQueryEmbedding, localEmbedding(chunk.text || ''));
       }
-      return { ...chunk, score };
+
+      const normChunk = String(chunk.text || '')
+        .toLowerCase()
+        .replace(/[أإآ]/g, 'ا')
+        .replace(/ة/g, 'ه')
+        .replace(/ى/g, 'ي');
+
+      let lexicalHits = 0;
+      for (const term of expandedTerms) {
+        if (term.length >= 2 && normChunk.includes(term)) {
+          lexicalHits += 1;
+        }
+      }
+
+      // Hybrid score: combine vector cosine similarity with lexical/bilingual keyword boost
+      // Note: for long PDF chunks (1100 chars), a valid 1-2 keyword match gives vectorScore ~0.06-0.12.
+      // Adding lexical boost (+0.18 for 1st hit, +0.08 per additional hit) ensures genuine matches pass >= 0.15
+      // while unrelated queries (0 lexical hits, vectorScore ~0) remain < 0.15.
+      const lexicalBoost = lexicalHits > 0 ? Math.min(0.75, 0.18 + (lexicalHits - 1) * 0.08) : 0;
+      const score = Math.min(1.0, vectorScore + lexicalBoost);
+
+      return { ...chunk, score, lexicalHits };
     })
     .filter((chunk) => chunk.score >= 0.15)
     .sort((a, b) => b.score - a.score);
 
   if (semanticMatches.length === 0 && chunks.length > 0) {
-    const isGeneralSummaryQuery = /(?:لخص|ملخص|overview|summary|محتوى|مواضيع|topics|outline|what is this|عن ماذا)/i.test(query);
-    if (isGeneralSummaryQuery) {
-      return chunks.slice(0, topK).map((c) => ({ ...c, score: 0.25 }));
+    const isGeneralStudyQuery = /(?:لخص|ملخص|overview|summary|محتوى|مواضيع|topics|outline|what is this|عن ماذا|المحاضره|المحاضرة|المذكره|المذكرة|الدرس|الفصل|اهم النقاط|أهم النقاط|الاسئله|الأسئلة|اسئله|أسئلة|امتحان|مراجعه|مراجعة|اشرح لي هذا|اشرح هذا|explain that|simpler|example|summarize|check-for-understanding)/i.test(query);
+    if (isGeneralStudyQuery || rawTokens.length === 0) {
+      return chunks.slice(0, Math.max(effectiveTopK, 6)).map((c) => ({ ...c, score: 0.35 }));
     }
     return [];
   }
 
-  return semanticMatches.slice(0, topK);
+  return semanticMatches.slice(0, Math.max(effectiveTopK, 6));
 }
 
 function cleanJson(text) {
@@ -1089,31 +1176,145 @@ const aiLimiter = createRateLimiter({ windowMs: 60 * 1000, max: 60, message: 'To
 app.use('/api', generalLimiter);
 app.use('/api/auth', authLimiter);
 
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({ limit: '15mb' }));
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: config.maxFileMb * 1024 * 1024 }, fileFilter: (_req, file, cb) => cb(null, file.mimetype === 'application/pdf' || file.mimetype === 'text/plain') });
+
+function splitTextForTtsChunks(text, maxLen = 170) {
+  const cleaned = String(text || '')
+    .replace(/[#*_`~>|]/g, ' ')
+    .replace(/\[(?:صفحة|Page|p\.)\s*\d+\]/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!cleaned) return [];
+  const sentences = cleaned.split(/(?<=[.!?؟،؛\n])\s+/);
+  const chunks = [];
+  let current = '';
+  for (const s of sentences) {
+    if (!s) continue;
+    if ((current + ' ' + s).trim().length <= maxLen) {
+      current = (current + ' ' + s).trim();
+    } else {
+      if (current) chunks.push(current);
+      if (s.length <= maxLen) {
+        current = s;
+      } else {
+        const words = s.split(/\s+/);
+        let sub = '';
+        for (const w of words) {
+          if ((sub + ' ' + w).trim().length <= maxLen) {
+            sub = (sub + ' ' + w).trim();
+          } else {
+            if (sub) chunks.push(sub);
+            sub = w.slice(0, maxLen);
+          }
+        }
+        current = sub;
+      }
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks.slice(0, 10);
+}
 
 app.get('/api/status', (_req, res) => res.json({ ok: true, aiMode: ai ? 'live' : 'demo', model: config.model, maxFileMb: config.maxFileMb }));
 app.get('/api/tts', async (req, res) => {
   try {
-    const rawText = String(req.query.text || '').slice(0, 350).trim();
-    const lang = req.query.lang === 'en' ? 'en' : req.query.lang === 'fr' ? 'fr' : req.query.lang === 'es' ? 'es' : req.query.lang === 'de' ? 'de' : 'ar';
+    const rawText = String(req.query.text || '').slice(0, 1400).trim();
     if (!rawText) return res.status(400).send('No text provided');
-    
-    const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${lang}&q=${encodeURIComponent(rawText)}`;
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-      },
-    });
-    if (!response.ok) throw new Error('TTS upstream returned ' + response.status);
-    
+
+    // Auto-detect actual text language so Arabic text is always spoken with an Arabic neural voice
+    // and English text is spoken with an English neural voice
+    const hasArabic = /[\u0600-\u06FF]/.test(rawText);
+    const reqLang = String(req.query.lang || 'ar').toLowerCase();
+    const lang = hasArabic
+      ? 'ar'
+      : reqLang.startsWith('en')
+      ? 'en'
+      : reqLang.startsWith('fr')
+      ? 'fr'
+      : reqLang.startsWith('es')
+      ? 'es'
+      : reqLang.startsWith('de')
+      ? 'de'
+      : 'en';
+
+    const chunks = splitTextForTtsChunks(rawText, 170);
+    if (!chunks.length) return res.status(400).send('No speakable text');
+
+    const buffers = await Promise.all(
+      chunks.map(async (chunkText) => {
+        const chunkLang = /[\u0600-\u06FF]/.test(chunkText) ? 'ar' : lang === 'ar' ? 'en' : lang;
+        const url = `https://translate.google.com/translate_tts?ie=UTF-8&client=tw-ob&tl=${chunkLang}&q=${encodeURIComponent(chunkText)}`;
+        const response = await fetch(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+          },
+        });
+        if (!response.ok) throw new Error('TTS upstream returned ' + response.status);
+        return Buffer.from(await response.arrayBuffer());
+      })
+    );
+
     res.setHeader('Content-Type', 'audio/mpeg');
     res.setHeader('Cache-Control', 'public, max-age=86400');
-    const buffer = Buffer.from(await response.arrayBuffer());
-    res.send(buffer);
+    res.send(Buffer.concat(buffers));
   } catch (err) {
     console.warn('TTS proxy notice:', err.message);
     res.status(500).json({ error: 'TTS unavailable' });
+  }
+});
+
+// Multimodal Speech-to-Text (STT) endpoint powered by Gemini for browsers where Web Speech API is flaky (e.g., macOS Safari)
+app.post('/api/stt', async (req, res) => {
+  try {
+    const audioBase64 = String(req.body.audio || '').replace(/^data:[^;]+;base64,/, '').trim();
+    const mimeType = String(req.body.mimeType || 'audio/webm').split(';')[0].trim() || 'audio/webm';
+    const langHint = req.body.lang === 'en' ? 'English' : 'Arabic (Egyptian or Modern Standard Arabic) or English';
+
+    if (!audioBase64 || audioBase64.length < 100) {
+      return res.json({ transcript: '' });
+    }
+    if (!ai) {
+      return res.status(503).json({ error: 'AI speech recognition not configured', transcript: '' });
+    }
+
+    const models = [...new Set(config.models)];
+    for (const model of models) {
+      try {
+        const response = await ai.models.generateContent({
+          model,
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                {
+                  inlineData: {
+                    mimeType,
+                    data: audioBase64,
+                  },
+                },
+                {
+                  text: `Transcribe the spoken audio accurately into plain text (${langHint}). Return ONLY the exact spoken words without quotes, timestamps, explanations, or extra commentary. If the audio is completely silent or contains only background noise with no speech, return an empty string.`,
+                },
+              ],
+            },
+          ],
+          config: { temperature: 0.1, maxOutputTokens: 250 },
+        });
+        const transcript = String(response?.text || '')
+          .replace(/^["'«»]+|["'«»]+$/g, '')
+          .replace(/^(?:transcript|transcription)\s*:\s*/i, '')
+          .trim();
+        return res.json({ transcript });
+      } catch (err) {
+        if (err.status === 429 || (err.message && err.message.includes('429'))) continue;
+        break;
+      }
+    }
+    return res.json({ transcript: '' });
+  } catch (err) {
+    console.warn('STT error:', err.message);
+    return res.json({ transcript: '' });
   }
 });
 app.get('/api/test-gemini', requireUser, aiLimiter, async (_req, res) => {
@@ -1496,6 +1697,19 @@ app.post('/api/workspaces/:id/chat', requireUser, aiLimiter, async (req, res, ne
     let workspaceChunks = (store.chunks || []).filter((chunk) => chunk.workspaceId === req.params.id);
     let scopeDescription = '';
 
+    // Detect if the question explicitly references a Study Sheet number (e.g. "اشرح لي الورقة رقم 2" / "Study Sheet #2")
+    const sheetMatch = question.match(/(?:ورقة|ورقه|الورقة|الورقه|study\s*sheet|sheet)\s*(?:مذاكرة\s*)?(?:رقم|#)?\s*(\d+)/i);
+    if (sheetMatch && (!scope || scope.type === 'lecture')) {
+      const sheetNum = parseInt(sheetMatch[1], 10);
+      const matchedSheet = (view.studySheets || []).find((s) => s.sheetNumber === sheetNum);
+      if (matchedSheet) {
+        scopeDescription = `Study Sheet #${matchedSheet.sheetNumber}: "${matchedSheet.title}" (Pages ${(matchedSheet.sourcePages || []).join(', ')})`;
+        const sheetPages = new Set(matchedSheet.sourcePages || []);
+        const filtered = workspaceChunks.filter((c) => sheetPages.has(c.page));
+        if (filtered.length > 0) workspaceChunks = filtered;
+      }
+    }
+
     if (scope && scope.type === 'topic' && scope.topicId) {
       const topic = (view.semanticTopics || []).find((t) => t.id === scope.topicId);
       if (topic) {
@@ -1519,15 +1733,40 @@ app.post('/api/workspaces/:id/chat', requireUser, aiLimiter, async (req, res, ne
       if (filtered.length > 0) workspaceChunks = filtered;
     }
 
-    const relevant = await retrieve(workspaceChunks, question);
+    let relevant = await retrieve(workspaceChunks, question, question, 8);
+    // If a specific scope (Topic, Sheet, or Page) was explicitly targeted and lexical/vector retrieval didn't match,
+    // use the scoped chunks directly so scoped questions always succeed.
+    if (relevant.length === 0 && scopeDescription && workspaceChunks.length > 0) {
+      relevant = workspaceChunks.slice(0, 8).map((c) => ({ ...c, score: 0.85 }));
+    }
+
     const isTopicInNotebook = relevant.length > 0 && (relevant[0].score === undefined || relevant[0].score >= 0.15);
     const docTitle = (view.title || 'your uploaded lecture');
-    const isArabic = /[\u0600-\u06FF]/.test(question);
+    const isArabic = /[\u0600-\u06FF]/.test(question) || userLang === 'ar';
     const coreConcepts = view.concepts?.length
       ? view.concepts.slice(0, 3).map((c) => c.name).join('، ')
       : view.semanticTopics?.length
       ? view.semanticTopics.slice(0, 3).map((t) => t.title).join('، ')
       : docTitle;
+
+    // Build deep enriched RAG context combining retrieved chunks + structured blocks (definitions, tables, headings)
+    const relevantPages = new Set(relevant.map((c) => c.page));
+    const pageBlocks = (view.extractedBlocks || []).filter((b) => relevantPages.has(b.page));
+    const blockDefinitions = pageBlocks
+      .filter((b) => b.type === 'definition')
+      .slice(0, 12)
+      .map((d) => `- [Page ${d.page}] ${d.term}: ${d.meaning || d.content}`)
+      .join('\n');
+    const blockTables = pageBlocks
+      .filter((b) => b.type === 'table')
+      .slice(0, 4)
+      .map((t) => `- [Table on Page ${t.page}]: ${t.content}`)
+      .join('\n');
+    const enrichedRagContext = [
+      contextText(relevant),
+      blockDefinitions ? `\nExtracted Key Definitions from these Pages:\n${blockDefinitions}` : '',
+      blockTables ? `\nExtracted Tables from these Pages:\n${blockTables}` : '',
+    ].filter(Boolean).join('\n');
 
     let answer;
 
@@ -1540,20 +1779,19 @@ app.post('/api/workspaces/:id/chat', requireUser, aiLimiter, async (req, res, ne
       } else if (ai) {
         const targetPage = detectPageNumber(question);
         const pageInstruction = targetPage !== null
-          ? `The user specifically asked for Page/Slide ${targetPage}. Provide a thorough, complete, and meticulous explanation of all concepts, questions, and details from Page ${targetPage} found in the sources.`
+          ? `The user specifically asked for Page/Slide ${targetPage}. Provide an exhaustive, complete, and meticulous explanation of every single concept, definition, bullet point, table, and question from Page ${targetPage} found in the sources.`
           : '';
         const scopeInstruction = scopeDescription
-          ? `CRITICAL CONTEXT SCOPE: The student explicitly targeted ${scopeDescription}. Prioritize explanation from this specific scope.`
+          ? `CRITICAL CONTEXT SCOPE: The student explicitly targeted ${scopeDescription}. Prioritize a deep, complete explanation from this specific scope.`
           : '';
 
         const prompt = isVoice
           ? `You are Nabta AI (نبتة) in an interactive LIVE SPOKEN VOICE conversation with a student studying "${docTitle}".
 CRITICAL SPOKEN VOICE GUIDELINES:
-- Provide a direct, crystal-clear explanation in 2 to 3 sentences maximum (around 35-50 words total).
-- Speak warmly and naturally like a real human tutor talking aloud.
-- DO NOT use any Markdown formatting.
-- Speak in natural, fluent ${userLang === 'en' ? 'English' : userLang === 'fr' ? 'French' : userLang === 'es' ? 'Spanish' : userLang === 'de' ? 'German' : 'Arabic'}.
-- Do NOT include English words in parentheses alongside Arabic terms.
+- Provide a direct, warm, crystal-clear spoken explanation in 3 to 4 natural sentences (around 45-70 words total).
+- Speak naturally like an engaging university professor talking aloud to a student.
+- DO NOT use any Markdown formatting, asterisks, or bullet symbols.
+- Speak in natural, fluent ${/[\u0600-\u06FF]/.test(question) ? 'Arabic' : userLang === 'en' ? 'English' : 'Arabic'}.
 - Answer strictly from the provided source context below.
 ${pageInstruction}
 ${scopeInstruction}
@@ -1562,67 +1800,60 @@ Student Spoken Question:
 ${question}
 
 Source Context:
-${contextText(relevant.slice(0, 3))}`
-          : `You are Nabta AI (نبتة), an expert academic tutor.
-Your goal is to provide a clean, beautifully organized, and crystal-clear explanation for a student studying "${docTitle}".
+${contextText(relevant.slice(0, 4))}`
+          : `You are Nabta AI (نبتة), a senior university professor and deep RAG academic tutor.
+Your goal is to provide a comprehensive, thorough, deeply detailed, and well-structured academic explanation for a student studying "${docTitle}", strictly grounded in the retrieved lecture pages below.
 
-CRITICAL FORMATTING RULES:
-- DO NOT use conversational greetings.
-- DO NOT use closing boilerplate.
-- DO NOT clutter the text with stars, hashes, or divider lines.
-- Keep the presentation clean, calm, and very easy on the eyes.
-
-STRICT GROUNDING RULES:
-- Language: ALWAYS respond in fluent, natural Arabic if the question is in Arabic.
-- Answer STRICTLY and ONLY from the provided source context below.
+CRITICAL FORMATTING & DEPTH RULES:
+- DO NOT use conversational greetings or closing boilerplate.
+- NEVER summarize briefly or skip details! Explain every concept, mechanism, comparison, and point found in the retrieved source pages in full academic depth.
+- Structure your explanation into clear, readable sections with descriptive headings:
+  1. الفكرة الأساسية والشرح التفصيلي المتعمق (Comprehensive Page-by-Page Explanation with [صفحة X] citations)
+  2. أهم المصطلحات والتعريفات الدقيقة (Key Definitions & Technical Terms in Arabic + English in parentheses)
+  3. الخطوات وآلية العمل أو المقارنات (Detailed Mechanisms, Workflows, & Comparisons from the text)
+  4. أمثلة تطبيقية وخلاصة التركيز للامتحان (Practical Examples & Exam Takeaways)
+- Language: ALWAYS respond in fluent, natural Arabic if the question is in Arabic (or if the student asks in Arabic about an English PDF, explain everything thoroughly in Arabic while keeping technical English terms in parentheses alongside their Arabic explanation). If the question is in English, respond in clear academic English.
+- Cite the exact source page numbers naturally throughout your explanation like [صفحة X] or [Page X].
 - If explaining multiple-choice questions or exercises:
-  For each question:
-  1. Write the question clearly in Arabic or original language.
-  2. List the options (A, B, C, D) clearly on separate lines.
-  3. Clearly state the correct answer: "الإجابة الصحيحة: [الرمز] [النص]".
-  4. Provide a simple, clear explanation.
-- Keep sentences concise, clear, and easy to read.
-- Preserve technical English terms in parentheses alongside Arabic terms.
+  1. Write the question clearly.
+  2. List options (A, B, C, D) on separate lines.
+  3. State the correct answer: "الإجابة الصحيحة: [الرمز] [النص]".
+  4. Explain in detail why that option is correct and why the others are not.
 ${pageInstruction}
 ${scopeInstruction}
 
 User Question:
 ${question}
 
-Source Context from User's Notebook:
-${contextText(relevant)}`;
+Retrieved RAG Source Context from User's PDF Notebook:
+${enrichedRagContext}`;
 
-        answer = await geminiText(prompt, isVoice ? { maxOutputTokens: 200, temperature: 0.3 } : {});
+        answer = await geminiText(prompt, isVoice ? { maxOutputTokens: 250, temperature: 0.3 } : { maxOutputTokens: 2800, temperature: 0.25 });
       }
     } else {
       // 2. OPEN MODE (GROUNDED MODE IS OFF): answer outside topics AND include educational note
       if (ai) {
         const targetPage = detectPageNumber(question);
         const pageInstruction = targetPage !== null
-          ? `The user specifically asked for Page/Slide ${targetPage}. Provide a thorough explanation from Page ${targetPage}.`
+          ? `The user specifically asked for Page/Slide ${targetPage}. Provide a thorough, complete explanation from Page ${targetPage}.`
           : '';
 
         const prompt = isVoice
           ? `You are Nabta AI (نبتة) in a spoken conversation with a student studying "${docTitle}".
-- Explain clearly in 2 spoken sentences.
+- Explain clearly and naturally in 3 spoken sentences.
 - No markdown formatting.
-- Fluent ${userLang === 'en' ? 'English' : 'Arabic'}.
+- Fluent ${/[\u0600-\u06FF]/.test(question) ? 'Arabic' : userLang === 'en' ? 'English' : 'Arabic'}.
 ${!isTopicInNotebook ? `- Mention smoothly in one spoken sentence that their current notes focus on "${docTitle}".` : ''}
 
 Question: ${question}`
-          : `You are Nabta AI (نبتة), an expert academic tutor.
-Provide a clean, beautifully organized, and crystal-clear explanation.
+          : `You are Nabta AI (نبتة), a senior university professor and academic tutor.
+Provide a comprehensive, deeply detailed, and well-structured explanation.
 
-CRITICAL FORMATTING RULES:
+CRITICAL FORMATTING & DEPTH RULES:
 - DO NOT use conversational greetings or closing boilerplate.
-- DO NOT clutter the text with stars, hashes, or divider lines.
-- Keep the presentation clean, calm, and very easy on the eyes.
-
-CONTENT & PEDAGOGY:
-- Language: ALWAYS respond in fluent, natural Arabic if the question is in Arabic.
-- Grounded Mode is OFF: Answer the student's question directly, accurately, and thoroughly using your full knowledge base.
-- If explaining questions: state the question, list options, state the correct answer, and explain clearly.
-- Preserve technical English terms in parentheses.
+- Explain thoroughly with clear section headings, definitions, step-by-step breakdowns, and examples.
+- Language: ALWAYS respond in fluent, natural Arabic if the question is in Arabic (keeping technical English terms in parentheses).
+- Grounded Mode is OFF: Answer the student's question directly, accurately, and in full depth using both the retrieved source context (if relevant) and your broader academic knowledge.
 ${!isTopicInNotebook ? `CRITICAL MANDATORY REQUIREMENT:
 Because this topic is NOT covered in the student's notebook ("${docTitle}"), you MUST conclude your answer with this exact educational note on a separate line at the very end:
 "ملاحظة: بالرجوع إلى المحتوى التعليمي المرفق (المستندات الخاصة بـ ${docTitle})، لا يتناول المنهج شرح هذا الموضوع، بل يركز على مفاهيم ${docTitle} مثل ${coreConcepts}."` : ''}
@@ -1632,9 +1863,9 @@ User Question:
 ${question}
 
 Source Context from User's Notebook (if relevant):
-${relevant.length ? contextText(relevant) : 'No specific notebook excerpts found; answer fully using general knowledge.'}`;
+${relevant.length ? enrichedRagContext : 'No specific notebook excerpts found; answer fully using general academic knowledge.'}`;
 
-        answer = await geminiText(prompt, isVoice ? { maxOutputTokens: 200, temperature: 0.3 } : {});
+        answer = await geminiText(prompt, isVoice ? { maxOutputTokens: 250, temperature: 0.3 } : { maxOutputTokens: 2800, temperature: 0.3 });
 
         // Programmatic guarantee: ensure the educational note is always appended in Open Mode for external questions
         if (!isTopicInNotebook && answer) {
@@ -1649,14 +1880,39 @@ ${relevant.length ? contextText(relevant) : 'No specific notebook excerpts found
       }
     }
 
-    // Resilient fallback if AI is offline or unavailable
+    // Resilient deep RAG fallback if AI is offline or rate-limited
     if (!answer) {
       if (relevant.length) {
-        const topTexts = relevant.slice(0, 2).map((c) => `• [صفحة/Page ${c.page}]:\n${c.text}`).join('\n\n');
-        const scopePrefix = scopeDescription ? (isArabic ? `[النطاق المستهدف: ${scopeDescription}]\n\n` : `[Targeted Scope: ${scopeDescription}]\n\n`) : '';
-        answer = isArabic
-          ? `${scopePrefix}بناءً على محتوى مذكراتك المرفوعة:\n\n${topTexts}`
-          : `${scopePrefix}Here is what your uploaded study material covers:\n\n${topTexts}`;
+        const sortedChunks = [...relevant].slice(0, 6).sort((a, b) => a.page - b.page);
+        const pagesList = [...new Set(sortedChunks.map((c) => c.page))].join('، ');
+        const matchedTopicExp = (view.explanations?.topics || []).find((t) =>
+          (t.sourcePages || []).some((p) => relevantPages.has(p))
+        );
+
+        if (isVoice) {
+          const firstChunk = sortedChunks[0]?.text?.slice(0, 260) || '';
+          answer = isArabic
+            ? `بناءً على المحاضرة في الصفحة ${sortedChunks[0]?.page || 1}: ${ matchedTopicExp?.overview || firstChunk }`
+            : `Based on page ${sortedChunks[0]?.page || 1} of your lecture: ${ matchedTopicExp?.overview || firstChunk }`;
+        } else {
+          const scopePrefix = scopeDescription
+            ? (isArabic ? `النطاق المستهدف: ${scopeDescription}\n\n` : `Targeted Scope: ${scopeDescription}\n\n`)
+            : '';
+          const topicIntro = matchedTopicExp?.sections?.detailedExplanation
+            ? (isArabic
+                ? `الشرح التفصيلي المنهجي (صفحات ${pagesList}):\n${matchedTopicExp.sections.detailedExplanation}\n\n`
+                : `Detailed Conceptual Walkthrough (Pages ${pagesList}):\n${matchedTopicExp.sections.detailedExplanation}\n\n`)
+            : '';
+          const chunkDetails = sortedChunks
+            .map((c) => (isArabic ? `• محتوى صفحة [${c.page}] من المذكرة:\n${c.text}` : `• Source Content [Page ${c.page}]:\n${c.text}`))
+            .join('\n\n');
+          const defsSection = blockDefinitions
+            ? (isArabic ? `\n\nأهم المصطلحات والتعريفات المستخرجة:\n${blockDefinitions}` : `\n\nKey Extracted Definitions:\n${blockDefinitions}`)
+            : '';
+          answer = isArabic
+            ? `${scopePrefix}${topicIntro}النصوص الكاملة الموثقة من صفحات المحاضرة (${pagesList}):\n\n${chunkDetails}${defsSection}`
+            : `${scopePrefix}${topicIntro}Complete Grounded Excerpts from Lecture Pages (${pagesList}):\n\n${chunkDetails}${defsSection}`;
+        }
       } else if (grounded) {
         answer = isArabic
           ? `عذراً، هذا الموضوع غير مذكور في مذكراتك المرفوعة (${docTitle}). يمكنك سؤالي عن محتويات مذكرتك، أو تعطيل «الوضع الموثق» إذا أردت شرحاً عاماً من خارج المذكرة.`
@@ -1670,7 +1926,7 @@ ${relevant.length ? contextText(relevant) : 'No specific notebook excerpts found
 
     const isDeclinedOrOut = !isTopicInNotebook || answer.includes('غير مذكور في مذكراتك') || answer.includes('لا يتناول المنهج');
     const citations = (!isDeclinedOrOut && relevant.length > 0 && (relevant[0].score === undefined || relevant[0].score >= 0.15))
-      ? relevant.slice(0, 3).map((chunk) => ({ document: chunk.documentName, page: chunk.page, excerpt: chunk.text.slice(0, 220) }))
+      ? relevant.slice(0, 5).map((chunk) => ({ document: chunk.documentName, page: chunk.page, excerpt: chunk.text.slice(0, 240) }))
       : [];
     const now = new Date().toISOString();
     store.messages.push({ id: randomUUID(), workspaceId: req.params.id, role: 'user', content: question, createdAt: now }, { id: randomUUID(), workspaceId: req.params.id, role: 'assistant', content: answer, citations, createdAt: now });

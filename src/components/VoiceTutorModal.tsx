@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Mic, MicOff, Volume2, VolumeX, X, Sparkles, RefreshCw, BookOpen } from "lucide-react";
+import { Mic, MicOff, Volume2, VolumeX, X, Sparkles, RefreshCw, BookOpen, Send } from "lucide-react";
 import { useI18n } from "../i18n";
 import { speakText, stopSpeaking, isSpeaking, createSpeechRecognizer, unlockAudio } from "../audio";
 import { Workspace } from "../types";
@@ -23,9 +23,10 @@ export const VoiceTutorModal: React.FC<VoiceTutorModalProps> = ({
   const [isListening, setIsListening] = useState(false);
   const [isAiSpeaking, setIsAiSpeaking] = useState(false);
   const [transcript, setTranscript] = useState("");
+  const [manualInput, setManualInput] = useState("");
   const [aiResponse, setAiResponse] = useState("");
   const [statusText, setStatusText] = useState("");
-  const [speechRate, setSpeechRate] = useState(1.15);
+  const [speechRate, setSpeechRate] = useState(1.0);
   const [isMuted, setIsMuted] = useState(false);
   const [isBusy, setIsBusy] = useState(false);
 
@@ -126,7 +127,9 @@ export const VoiceTutorModal: React.FC<VoiceTutorModalProps> = ({
       onResult: (text, isFinal) => {
         if (!isOpenRef.current) return;
         setTranscript(text);
+        setManualInput(text);
         if (isFinal) {
+          setManualInput("");
           sendVoiceQuery(text);
         }
       },
@@ -151,9 +154,9 @@ export const VoiceTutorModal: React.FC<VoiceTutorModalProps> = ({
   const toggleMic = () => {
     unlockAudio();
     if (isListening) {
+      setStatusText(t("loading"));
       recognizerRef.current?.stop();
       setIsListening(false);
-      setStatusText(t("voiceIdleState"));
     } else {
       stopSpeaking();
       setIsAiSpeaking(false);
@@ -164,6 +167,8 @@ export const VoiceTutorModal: React.FC<VoiceTutorModalProps> = ({
   const sendVoiceQuery = async (queryText: string) => {
     if (!queryText.trim() || isBusy || !isOpenRef.current) return;
     setIsBusy(true);
+    setManualInput("");
+    setTranscript(queryText);
     recognizerRef.current?.stop();
     setIsListening(false);
     stopSpeaking();
@@ -265,7 +270,7 @@ export const VoiceTutorModal: React.FC<VoiceTutorModalProps> = ({
   };
 
   const toggleSlower = () => {
-    const newRate = speechRate <= 0.88 ? 1.15 : 0.85;
+    const newRate = speechRate <= 0.88 ? 1.0 : 0.85;
     setSpeechRate(newRate);
     if (isAiSpeaking && aiResponse && isOpenRef.current) {
       stopSpeaking();
@@ -357,6 +362,28 @@ export const VoiceTutorModal: React.FC<VoiceTutorModalProps> = ({
             </div>
           )}
         </div>
+
+        {/* Live Transcript / Direct Question Input Bar */}
+        <form
+          className="voice-manual-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (manualInput.trim()) {
+              sendVoiceQuery(manualInput.trim());
+            }
+          }}
+        >
+          <input
+            type="text"
+            value={manualInput}
+            onChange={(e) => setManualInput(e.target.value)}
+            placeholder={lang === "ar" ? "تحدث بالمايك أو اكتب سؤالك هنا مباشرة..." : "Speak into the mic or type your question here..."}
+            disabled={isBusy}
+          />
+          <button type="submit" disabled={!manualInput.trim() || isBusy} title={lang === "ar" ? "إرسال" : "Send"}>
+            <Send size={15} />
+          </button>
+        </form>
 
         {/* Quick Voice Controls & Actions */}
         <div className="voice-quick-actions">
